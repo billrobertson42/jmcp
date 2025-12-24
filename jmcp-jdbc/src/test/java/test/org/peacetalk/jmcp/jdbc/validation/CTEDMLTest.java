@@ -18,7 +18,6 @@ class CTEDMLTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> ReadOnlySqlValidator.validateReadOnly(sql));
 
-        System.out.println("DELETE test exception: " + exception.getMessage());
         assertTrue(exception.getMessage().contains("DELETE") || exception.getMessage().contains("CTE"),
             "Exception should mention DELETE or CTE: " + exception.getMessage());
     }
@@ -32,7 +31,6 @@ class CTEDMLTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> ReadOnlySqlValidator.validateReadOnly(sql));
 
-        System.out.println("INSERT test exception: " + exception.getMessage());
         assertTrue(exception.getMessage().contains("INSERT") || exception.getMessage().contains("CTE"),
             "Exception should mention INSERT or CTE: " + exception.getMessage());
     }
@@ -47,7 +45,6 @@ class CTEDMLTest {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
             () -> ReadOnlySqlValidator.validateReadOnly(sql));
 
-        System.out.println("UPDATE test exception: " + exception.getMessage());
         assertTrue(exception.getMessage().contains("UPDATE") || exception.getMessage().contains("CTE"),
             "Exception should mention UPDATE or CTE: " + exception.getMessage());
     }

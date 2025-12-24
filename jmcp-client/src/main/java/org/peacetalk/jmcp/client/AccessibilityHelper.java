@@ -51,18 +51,6 @@ public class AccessibilityHelper {
     }
 
     /**
-     * Load system fonts to ensure best rendering.
-     * JavaFX automatically uses system fonts, but this method can be used
-     * to verify or log available fonts.
-     */
-    public static void logAvailableFonts() {
-        System.out.println("Available font families:");
-        for (String family : Font.getFamilies()) {
-            System.out.println("  - " + family);
-        }
-    }
-
-    /**
      * Get recommended font scale based on system settings.
      * This is a placeholder - JavaFX doesn't have direct API for system DPI,
      * but you can use system properties or user preferences.

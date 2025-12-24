@@ -17,15 +17,14 @@ public class DebugDescribeTable {
 
         DatabaseMetaData metaData = connection.getMetaData();
 
-        System.out.println("Getting columns for USERS table:");
         try (ResultSet rs = metaData.getColumns(null, null, "USERS", "%")) {
             int count = 0;
             while (rs.next()) {
                 count++;
-                System.out.println("Column " + count + ": " + rs.getString("COLUMN_NAME") +
+                System.err.println("Column " + count + ": " + rs.getString("COLUMN_NAME") +
                     " (" + rs.getString("TYPE_NAME") + ")");
             }
-            System.out.println("Total columns: " + count);
+            System.err.println("Total columns: " + count);
         }
 
         connection.close();

@@ -29,9 +29,14 @@ public class McpClientApp extends Application {
         primaryStage.setScene(scene);
         primaryStage.show();
 
+        // Get controller and setup preferences handling
+        McpClientController controller = loader.getController();
+        if (controller != null) {
+            controller.setupPreferences();
+        }
+
         // Cleanup on close
         primaryStage.setOnCloseRequest(event -> {
-            McpClientController controller = loader.getController();
             if (controller != null) {
                 controller.cleanup();
             }
