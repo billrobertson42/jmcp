@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/23" xmlns:fx="http://javafx.com/fxml/1"
+            fx:controller="org.peacetalk.jmcp.client.McpClientController"
+            prefWidth="1000" prefHeight="700"
+            stylesheets="@styles.css">
+
+    <!-- Top: Connection Section -->
+    <top>
+        <VBox spacing="10" styleClass="connection-section">
+            <Label text="MCP Server Connection" styleClass="section-header"/>
+
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <Label text="Server Command:"/>
+                <TextField fx:id="serverCommandField" HBox.hgrow="ALWAYS" onAction="#onConnect"/>
+                <Button fx:id="connectButton" text="Connect" onAction="#onConnect"/>
+                <Button fx:id="disconnectButton" text="Disconnect" onAction="#onDisconnect"/>
+            </HBox>
+
+            <HBox spacing="5">
+                <Label text="Status:"/>
+                <Label fx:id="statusLabel" text="Disconnected" styleClass="status"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Center: Main Content -->
+    <center>
+        <SplitPane dividerPositions="0.3, 0.7" orientation="HORIZONTAL">
+
+            <!-- Left: Tools List -->
+            <VBox spacing="5" style="-fx-padding: 10;">
+                <Label text="Available Tools" styleClass="section-header"/>
+                <ListView fx:id="toolsList" VBox.vgrow="ALWAYS">
+                    <placeholder>
+                        <Label text="Connect to a server to see tools"/>
+                    </placeholder>
+                </ListView>
+            </VBox>
+
+            <!-- Middle: Tool Details and Arguments -->
+            <VBox spacing="10" style="-fx-padding: 10;">
+                <Label text="Tool Details" styleClass="section-header"/>
+
+                <Label text="Description:"/>
+                <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
+                         prefRowCount="3"/>
+
+                <Label text="Input Schema:"/>
+                <TextArea fx:id="toolSchemaArea" editable="false" wrapText="true"
+                         prefRowCount="5"/>
+
+                <Separator/>
+
+                <Label text="Arguments" styleClass="section-header"/>
+                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                    <VBox fx:id="argumentsBox" spacing="5" style="-fx-padding: 5;">
+                        <Label text="Select a tool to see arguments"/>
+                    </VBox>
+                </ScrollPane>
+
+                <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
+                       maxWidth="Infinity"/>
+            </VBox>
+
+            <!-- Right: Results and Communication Log -->
+            <VBox spacing="5" style="-fx-padding: 10;">
+                <Label text="Output" styleClass="section-header"/>
+                <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
+                    <Tab text="Result">
+                        <TextArea fx:id="resultArea" editable="false" wrapText="true">
+                            <promptText>Tool results will appear here...</promptText>
+                        </TextArea>
+                    </Tab>
+                    <Tab text="Communication Log">
+                        <TextArea fx:id="communicationLogArea" editable="false" wrapText="false"
+                                 style="-fx-font-family: 'Monospace', 'Consolas', 'Courier New', monospace;">
+                            <promptText>JSON-RPC communication will appear here...</promptText>
+                        </TextArea>
+                    </Tab>
+                </TabPane>
+            </VBox>
+
+        </SplitPane>
+    </center>
+
+    <!-- Bottom: Status Bar -->
+    <bottom>
+        <HBox spacing="10" styleClass="status-bar">
+            <Label text="JDBC MCP Client v1.0"/>
+            <Separator orientation="VERTICAL"/>
+            <Label fx:id="workingDirectoryLabel"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>
+
