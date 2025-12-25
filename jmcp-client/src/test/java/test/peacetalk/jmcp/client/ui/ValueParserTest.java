@@ -1,7 +1,8 @@
-package org.peacetalk.jmcp.client.ui;
+package test.peacetalk.jmcp.client.ui;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.peacetalk.jmcp.client.ui.ValueParser;
 
 import static org.junit.jupiter.api.Assertions.*;
 

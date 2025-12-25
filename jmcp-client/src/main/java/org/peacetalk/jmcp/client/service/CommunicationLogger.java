@@ -10,33 +10,35 @@ import org.peacetalk.jmcp.core.model.JsonRpcResponse;
  */
 public class CommunicationLogger {
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private final StringBuilder logBuffer = new StringBuilder();
 
     /**
-     * Log a JSON-RPC request being sent.
+     * Format a JSON-RPC request being sent.
      *
      * @param request The request being sent
+     * @return Formatted log entry for the request
      */
-    public void logRequest(JsonRpcRequest request) {
-        logCommunication("SENT", request.method(), request);
+    public String formatRequest(JsonRpcRequest request) {
+        return formatCommunication("SENT", request.method(), request);
     }
 
     /**
-     * Log a JSON-RPC response being received.
+     * Format a JSON-RPC response being received.
      *
      * @param response The response received
+     * @return Formatted log entry for the response
      */
-    public void logResponse(JsonRpcResponse response) {
-        logCommunication("RECEIVED", "Response", response);
+    public String formatResponse(JsonRpcResponse response) {
+        return formatCommunication("RECEIVED", "Response", response);
     }
 
     /**
-     * Log an error that occurred during communication.
+     * Format an error that occurred during communication.
      *
      * @param message Error message
      * @param exception The exception that occurred (can be null)
+     * @return Formatted log entry for the error
      */
-    public void logError(String message, Exception exception) {
+    public String formatError(String message, Exception exception) {
         StringBuilder log = new StringBuilder();
 
         log.append("!".repeat(80)).append("\n");
@@ -49,29 +51,23 @@ public class CommunicationLogger {
         }
         log.append("\n");
 
-        logBuffer.append(log);
+        return log.toString();
     }
 
     /**
-     * Get the complete formatted log.
+     * Clear log (convenience method for UI).
+     * Note: This returns a command to clear, caller is responsible for clearing display.
      *
-     * @return The formatted log as a string
+     * @return Empty string signal
      */
-    public String getFormattedLog() {
-        return logBuffer.toString();
+    public String getClearCommand() {
+        return "";
     }
 
     /**
-     * Clear all logged entries.
+     * Internal method to format a communication event.
      */
-    public void clear() {
-        logBuffer.setLength(0);
-    }
-
-    /**
-     * Internal method to format and log a communication event.
-     */
-    private void logCommunication(String direction, String type, Object content) {
+    private String formatCommunication(String direction, String type, Object content) {
         StringBuilder log = new StringBuilder();
 
         // Add separator line
@@ -92,7 +88,9 @@ public class CommunicationLogger {
 
         log.append("\n");
 
-        logBuffer.append(log);
+        return log.toString();
     }
 }
+
+
 

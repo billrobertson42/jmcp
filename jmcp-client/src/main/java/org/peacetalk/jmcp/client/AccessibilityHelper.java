@@ -1,7 +1,6 @@
 package org.peacetalk.jmcp.client;
 
 import javafx.scene.Scene;
-import javafx.scene.text.Font;
 
 /**
  * Utility class for improving UI accessibility and readability.

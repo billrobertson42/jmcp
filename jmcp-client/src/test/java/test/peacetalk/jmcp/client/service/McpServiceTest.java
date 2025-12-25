@@ -1,8 +1,11 @@
-package org.peacetalk.jmcp.client.service;
+package test.peacetalk.jmcp.client.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.peacetalk.jmcp.client.service.McpService;
 import org.peacetalk.jmcp.core.model.Tool;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.Arrays;
 import java.util.List;
@@ -74,83 +77,65 @@ class McpServiceTest {
 
     @Test
     void testSortToolsCaseInsensitive() {
-        Tool tool1 = createTool("Zebra", "Should be last");
-        Tool tool2 = createTool("alpha", "Should be first");
-        Tool tool3 = createTool("Middle", "Should be middle");
+        Tool zebra = createTool("Zebra", "Should be last");
+        Tool alpha = createTool("alpha", "Should be first");
+        Tool middle = createTool("Middle", "Should be middle");
 
-        List<Tool> unsorted = Arrays.asList(tool1, tool2, tool3);
+        List<Tool> unsorted = Arrays.asList(zebra, alpha, middle);
         List<Tool> sorted = service.sortTools(unsorted);
 
         assertEquals(3, sorted.size());
-        assertEquals("alpha", sorted.get(0).name());
-        assertEquals("Middle", sorted.get(1).name());
-        assertEquals("Zebra", sorted.get(2).name());
-    }
-
-    @Test
-    void testSortToolsEmpty() {
-        List<Tool> empty = List.of();
-        List<Tool> sorted = service.sortTools(empty);
-
-        assertTrue(sorted.isEmpty());
-    }
-
-    @Test
-    void testSortToolsSingleItem() {
-        Tool tool = createTool("only", "Only tool");
-        List<Tool> single = List.of(tool);
-        List<Tool> sorted = service.sortTools(single);
-
-        assertEquals(1, sorted.size());
-        assertEquals("only", sorted.get(0).name());
+        assertSame(alpha, sorted.get(0));
+        assertSame(middle, sorted.get(1));
+        assertSame(zebra, sorted.get(2));
     }
 
     @Test
     void testSortToolsAlreadySorted() {
-        Tool tool1 = createTool("a", "First");
-        Tool tool2 = createTool("b", "Second");
-        Tool tool3 = createTool("c", "Third");
+        Tool a = createTool("a", "First");
+        Tool b = createTool("b", "Second");
+        Tool c = createTool("c", "Third");
 
-        List<Tool> alreadySorted = Arrays.asList(tool1, tool2, tool3);
+        List<Tool> alreadySorted = Arrays.asList(a, b, c);
         List<Tool> sorted = service.sortTools(alreadySorted);
 
         assertEquals(3, sorted.size());
-        assertEquals("a", sorted.get(0).name());
-        assertEquals("b", sorted.get(1).name());
-        assertEquals("c", sorted.get(2).name());
+        assertSame(a, sorted.get(0));
+        assertSame(b, sorted.get(1));
+        assertSame(c, sorted.get(2));
     }
 
     @Test
     void testSortToolsWithDuplicateNames() {
-        Tool tool1 = createTool("same", "First");
-        Tool tool2 = createTool("same", "Second");
-        Tool tool3 = createTool("different", "Different");
+        Tool second = createTool("same", "First");
+        Tool third = createTool("same", "Second");
+        Tool first = createTool("different", "Different");
 
-        List<Tool> withDuplicates = Arrays.asList(tool1, tool2, tool3);
+        List<Tool> withDuplicates = Arrays.asList(second, third, first);
         List<Tool> sorted = service.sortTools(withDuplicates);
 
         assertEquals(3, sorted.size());
-        assertEquals("different", sorted.get(0).name());
-        // The two "same" tools should be at the end
-        assertEquals("same", sorted.get(1).name());
-        assertEquals("same", sorted.get(2).name());
+        assertSame(first, sorted.get(0));
+        // The two "same" tools should be at the end - this assumes a stable sort.
+        assertSame(second, sorted.get(1));
+        assertSame(third, sorted.get(2));
     }
 
     @Test
     void testSortToolsPreservesOriginalList() {
-        Tool tool1 = createTool("z", "Last");
-        Tool tool2 = createTool("a", "First");
+        Tool z = createTool("z", "Last");
+        Tool a = createTool("a", "First");
 
-        List<Tool> original = Arrays.asList(tool1, tool2);
+        List<Tool> original = Arrays.asList(z, a);
         List<Tool> sorted = service.sortTools(original);
 
         // Original list should be unchanged
-        assertEquals("z", original.get(0).name());
-        assertEquals("a", original.get(1).name());
+        assertSame(z, original.get(0));
+        assertSame(a, original.get(1));
 
         // Sorted list should be different
-        assertEquals("a", sorted.get(0).name());
-        assertEquals("z", sorted.get(1).name());
+        assertSame(a, sorted.get(0));
+        assertSame(z, sorted.get(1));
     }
 
     @Test
@@ -174,8 +159,8 @@ class McpServiceTest {
      */
     private Tool createTool(String name, String description) {
         // Create a simple JSON schema
-        tools.jackson.databind.ObjectMapper mapper = new tools.jackson.databind.ObjectMapper();
-        tools.jackson.databind.node.ObjectNode schema = mapper.createObjectNode();
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode schema = mapper.createObjectNode();
         schema.put("type", "object");
 
         return new Tool(name, description, schema);

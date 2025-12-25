@@ -1,5 +1,6 @@
 package org.peacetalk.jmcp.client;
 
+import org.peacetalk.jmcp.client.ui.ToolArgumentFormBuilder;
 import tools.jackson.databind.ObjectMapper;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -8,7 +9,6 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import org.peacetalk.jmcp.client.service.CommunicationLogger;
 import org.peacetalk.jmcp.client.service.McpService;
-import org.peacetalk.jmcp.client.ui.ToolArgumentFormBuilder;
 import org.peacetalk.jmcp.client.ui.ToolListCell;
 import org.peacetalk.jmcp.client.ui.ValueParser;
 import org.peacetalk.jmcp.core.model.CallToolResult;
@@ -55,6 +55,20 @@ public class McpClientController {
     public void initialize() {
         // Setup tool list cell factory
         toolsList.setCellFactory(listView -> new ToolListCell());
+
+        // Setup tool list selection
+        toolsList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                onToolSelected(newVal);
+            }
+        });
+
+        // Set working directory in status bar
+        String workingDir = System.getProperty("user.dir");
+        workingDirectoryLabel.setText("Working Directory: " + workingDir);
+
+        // Initially disabled
+        updateConnectionState(false);
     }
 
     /**
@@ -84,20 +98,20 @@ public class McpClientController {
                 CommunicationListener listener = new CommunicationListener() {
                     @Override
                     public void onRequestSent(JsonRpcRequest request) {
-                        communicationLogger.logRequest(request);
-                        updateCommunicationLog();
+                        String logEntry = communicationLogger.formatRequest(request);
+                        appendToCommunicationLog(logEntry);
                     }
 
                     @Override
                     public void onResponseReceived(JsonRpcResponse response) {
-                        communicationLogger.logResponse(response);
-                        updateCommunicationLog();
+                        String logEntry = communicationLogger.formatResponse(response);
+                        appendToCommunicationLog(logEntry);
                     }
 
                     @Override
                     public void onError(String message, Exception exception) {
-                        communicationLogger.logError(message, exception);
-                        updateCommunicationLog();
+                        String logEntry = communicationLogger.formatError(message, exception);
+                        appendToCommunicationLog(logEntry);
                     }
                 };
 
@@ -124,8 +138,8 @@ public class McpClientController {
                     statusLabel.setText("Disconnected");
                     updateConnectionState(false);
                 });
-                communicationLogger.logError("Connection failed", e);
-                updateCommunicationLog();
+                String logEntry = communicationLogger.formatError("Connection failed", e);
+                appendToCommunicationLog(logEntry);
             }
         });
         connectThread.setDaemon(true);
@@ -142,7 +156,6 @@ public class McpClientController {
         formBuilder.clearForm(argumentsBox);
         argumentFields = null;
         resultArea.clear();
-        communicationLogger.clear();
         communicationLogArea.clear();
 
         statusLabel.setText("Disconnected");
@@ -231,12 +244,15 @@ public class McpClientController {
         alert.showAndWait();
     }
 
+
     /**
-     * Update the communication log display
+     * Append a log entry to the communication log display
      */
-    private void updateCommunicationLog() {
+    private void appendToCommunicationLog(String logEntry) {
         Platform.runLater(() -> {
-            communicationLogArea.setText(communicationLogger.getFormattedLog());
+            communicationLogArea.appendText(logEntry);
+            // Auto-scroll to bottom
+            communicationLogArea.setScrollTop(Double.MAX_VALUE);
         });
     }
 }
