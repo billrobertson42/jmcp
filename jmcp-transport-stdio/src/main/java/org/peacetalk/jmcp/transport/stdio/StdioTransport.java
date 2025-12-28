@@ -35,16 +35,10 @@ public class StdioTransport implements McpTransport {
                     if (line.trim().isEmpty()) {
                         continue;
                     }
-
-                    System.err.println("** Received: '" + line + "'");
-                    System.err.flush();
-
+                    
                     String response = handler.handleRequest(line);
                     writer.println(response);
                     writer.flush();
-
-                    System.err.println("** Sent: '" + response + "'");
-                    System.err.flush();
                 }
             } catch (IOException e) {
                 if (running.get()) {

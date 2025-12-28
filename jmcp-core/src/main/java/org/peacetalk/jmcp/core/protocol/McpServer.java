@@ -6,23 +6,39 @@ import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import org.peacetalk.jmcp.core.transport.McpRequestHandler;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * Main MCP server implementation that dispatches requests to protocol handlers
+ * Main MCP server implementation that dispatches requests to protocol handlers.
+ * Uses a HashMap for O(1) method dispatch instead of linear search.
  */
 public class McpServer implements McpRequestHandler {
     private final ObjectMapper objectMapper;
-    private final List<McpProtocolHandler> handlers;
+    private final Map<String, McpProtocolHandler> methodHandlers;
 
     public McpServer() {
         this.objectMapper = new ObjectMapper();
-        this.handlers = new CopyOnWriteArrayList<>();
+        this.methodHandlers = new HashMap<>();
     }
 
+    /**
+     * Register a protocol handler. The handler's supported methods are queried
+     * once and stored in a dispatch table for efficient O(1) lookup.
+     *
+     * @param handler The handler to register
+     * @throws IllegalStateException if a method is already registered to another handler
+     */
     public void registerHandler(McpProtocolHandler handler) {
-        handlers.add(handler);
+        for (String method : handler.getSupportedMethods()) {
+            if (methodHandlers.containsKey(method)) {
+                throw new IllegalStateException(
+                    "Method '" + method + "' is already registered to handler: " +
+                    methodHandlers.get(method).getClass().getName()
+                );
+            }
+            methodHandlers.put(method, handler);
+        }
     }
 
     @Override
@@ -49,25 +65,26 @@ public class McpServer implements McpRequestHandler {
     }
 
     private JsonRpcResponse processRequest(JsonRpcRequest request) {
-        for (McpProtocolHandler handler : handlers) {
-            if (handler.canHandle(request.method())) {
-                try {
-                    return handler.handle(request);
-                } catch (Exception e) {
-                    System.err.println("Error handling request '" + request.method() + "': " + e.getMessage());
-                    e.printStackTrace(System.err);
-                    return JsonRpcResponse.error(
-                        request.id(),
-                        JsonRpcError.internalError("Error handling request: " + e.getMessage())
-                    );
-                }
-            }
+        McpProtocolHandler handler = methodHandlers.get(request.method());
+
+        if (handler == null) {
+            return JsonRpcResponse.error(
+                request.id(),
+                JsonRpcError.methodNotFound(request.method())
+            );
         }
 
-        return JsonRpcResponse.error(
-            request.id(),
-            JsonRpcError.methodNotFound(request.method())
-        );
+        try {
+            return handler.handle(request);
+        } catch (Exception e) {
+            System.err.println("Error handling request '" + request.method() + "': " + e.getMessage());
+            e.printStackTrace(System.err);
+            return JsonRpcResponse.error(
+                request.id(),
+                JsonRpcError.internalError("Error handling request: " + e.getMessage())
+            );
+        }
     }
 }
+
 

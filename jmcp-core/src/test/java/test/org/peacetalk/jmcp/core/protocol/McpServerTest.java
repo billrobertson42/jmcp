@@ -14,6 +14,8 @@ import org.peacetalk.jmcp.core.protocol.McpProtocolHandler;
 import org.peacetalk.jmcp.core.protocol.McpServer;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -37,7 +39,7 @@ class McpServerTest {
     @Test
     void testHandleValidRequest() throws Exception {
         // Setup
-        when(mockHandler.canHandle("test_method")).thenReturn(true);
+        when(mockHandler.getSupportedMethods()).thenReturn(Set.of("test_method"));
         when(mockHandler.handle(any(JsonRpcRequest.class)))
             .thenReturn(JsonRpcResponse.success(1, "test result"));
 
@@ -55,14 +57,14 @@ class McpServerTest {
         assertEquals(1, response.id());
         assertEquals("test result", response.result());
 
-        verify(mockHandler).canHandle("test_method");
+        verify(mockHandler).getSupportedMethods();
         verify(mockHandler).handle(any(JsonRpcRequest.class));
     }
 
     @Test
     void testHandleMethodNotFound() throws Exception {
         // Setup
-        when(mockHandler.canHandle(anyString())).thenReturn(false);
+        when(mockHandler.getSupportedMethods()).thenReturn(Set.of("known_method"));
         server.registerHandler(mockHandler);
 
         String requestJson = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"unknown_method\"}";
@@ -91,7 +93,7 @@ class McpServerTest {
     @Test
     void testHandlerThrowsException() throws Exception {
         // Setup
-        when(mockHandler.canHandle("error_method")).thenReturn(true);
+        when(mockHandler.getSupportedMethods()).thenReturn(Set.of("error_method"));
         when(mockHandler.handle(any(JsonRpcRequest.class)))
             .thenThrow(new RuntimeException("Handler error"));
 
@@ -115,12 +117,10 @@ class McpServerTest {
         McpProtocolHandler handler1 = mock(McpProtocolHandler.class);
         McpProtocolHandler handler2 = mock(McpProtocolHandler.class);
 
-        when(handler1.canHandle("method1")).thenReturn(true);
-        when(handler1.canHandle("method2")).thenReturn(false);
+        when(handler1.getSupportedMethods()).thenReturn(Set.of("method1"));
         when(handler1.handle(any())).thenReturn(JsonRpcResponse.success(1, "result1"));
 
-        when(handler2.canHandle("method1")).thenReturn(false);
-        when(handler2.canHandle("method2")).thenReturn(true);
+        when(handler2.getSupportedMethods()).thenReturn(Set.of("method2"));
         when(handler2.handle(any())).thenReturn(JsonRpcResponse.success(2, "result2"));
 
         server.registerHandler(handler1);
@@ -140,5 +140,24 @@ class McpServerTest {
         JsonRpcResponse response2 = objectMapper.readValue(responseJson2, JsonRpcResponse.class);
         assertEquals("result2", response2.result());
     }
-}
 
+    @Test
+    void testDuplicateMethodRegistration() {
+        // Setup
+        McpProtocolHandler handler1 = mock(McpProtocolHandler.class);
+        McpProtocolHandler handler2 = mock(McpProtocolHandler.class);
+
+        when(handler1.getSupportedMethods()).thenReturn(Set.of("duplicate_method"));
+        when(handler2.getSupportedMethods()).thenReturn(Set.of("duplicate_method"));
+
+        server.registerHandler(handler1);
+
+        // Verify that registering a second handler for the same method throws an exception
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            server.registerHandler(handler2);
+        });
+
+        assertTrue(exception.getMessage().contains("duplicate_method"));
+        assertTrue(exception.getMessage().contains("already registered"));
+    }
+}

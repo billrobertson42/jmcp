@@ -139,6 +139,8 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
+                System.err.println("Connection failed: " + e.getMessage());
+                e.printStackTrace(System.err);
                 Platform.runLater(() -> {
                     showError("Connection failed: " + e.getMessage());
                     statusLabel.setText("Disconnected");
@@ -154,26 +156,98 @@ public class McpClientController {
 
     @FXML
     private void onDisconnect() {
-        mcpService.disconnect();
+        // Immediately disable all interactive controls to prevent double-clicks
+        disconnectButton.setDisable(true);
+        connectButton.setDisable(true);
+        serverCommandField.setDisable(true);
+        toolsComboBox.setDisable(true);
+        executeButton.setDisable(true);
 
-        toolsComboBox.getItems().clear();
-        toolsComboBox.getSelectionModel().clearSelection();
-        toolDescriptionArea.clear();
-        formBuilder.clearForm(argumentsBox);
-        argumentFields = null;
-        resultArea.clear();
-        communicationLogArea.clear();
-        serverStderrArea.clear();
+        statusLabel.setText("Disconnecting...");
 
-        statusLabel.setText("Disconnected");
-        updateConnectionState(false);
+        // Run disconnect in background thread to avoid blocking UI
+        Thread disconnectThread = new Thread(() -> {
+            try {
+                mcpService.disconnect();
+            } catch (Exception e) {
+                System.err.println("Error during disconnect: " + e.getMessage());
+                e.printStackTrace(System.err);
+            } finally {
+                // ALWAYS update UI, even if disconnect failed
+                cleanupAndResetUI();
+            }
+        });
+        disconnectThread.setDaemon(true);
+        disconnectThread.start();
+
+        // Safety mechanism: Force UI reset after 5 seconds even if disconnect is still running
+        // This prevents permanent UI freeze if disconnect hangs
+        Thread timeoutThread = new Thread(() -> {
+            try {
+                // Wait for disconnect thread to finish, but max 5 seconds
+                disconnectThread.join(5000);
+
+                // If thread is still alive after 5 seconds, force UI reset anyway
+                if (disconnectThread.isAlive()) {
+                    System.err.println("WARNING: Disconnect operation timed out after 5 seconds - forcing UI reset");
+                    cleanupAndResetUI();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        timeoutThread.setDaemon(true);
+        timeoutThread.start();
     }
 
     /**
-     * Cleanup when application closes
+     * Clean up all UI state and reset to disconnected state.
+     * This is called from background threads, so uses Platform.runLater().
+     */
+    private void cleanupAndResetUI() {
+        Platform.runLater(() -> {
+            // Clear all UI state
+            toolsComboBox.getItems().clear();
+            toolsComboBox.getSelectionModel().clearSelection();
+            toolDescriptionArea.clear();
+            formBuilder.clearForm(argumentsBox);
+            argumentFields = null;
+            selectedTool = null;  // Clear selected tool reference
+            resultArea.clear();
+            communicationLogArea.clear();
+            serverStderrArea.clear();
+
+            statusLabel.setText("Disconnected");
+            updateConnectionState(false);  // This will properly set button states
+        });
+    }
+
+    /**
+     * Cleanup when application closes.
+     * Runs in background with timeout to avoid blocking app exit.
      */
     public void cleanup() {
-        mcpService.cleanup();
+        // Run cleanup in background thread with timeout
+        Thread cleanupThread = new Thread(() -> {
+            try {
+                mcpService.cleanup();
+            } catch (Exception e) {
+                System.err.println("Error during cleanup: " + e.getMessage());
+                e.printStackTrace(System.err);
+            }
+        });
+        cleanupThread.setDaemon(true);
+        cleanupThread.start();
+
+        // Give it 2 seconds max, then exit anyway
+        try {
+            cleanupThread.join(2000);
+            if (cleanupThread.isAlive()) {
+                System.err.println("WARNING: Cleanup timed out after 2 seconds - forcing exit");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void onToolSelected(Tool tool) {
@@ -190,6 +264,8 @@ public class McpClientController {
             fullDescription.append("\n\n--- Input Schema ---\n");
             fullDescription.append(prettySchema);
         } catch (Exception e) {
+            System.err.println("Error displaying schema for tool " + tool.name() + ": " + e.getMessage());
+            e.printStackTrace(System.err);
             fullDescription.append("\n\nError displaying schema: ").append(e.getMessage());
         }
 
@@ -229,6 +305,8 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
+                System.err.println("Error executing tool: " + e.getMessage());
+                e.printStackTrace(System.err);
                 Platform.runLater(() -> {
                     resultArea.setText("Error: " + e.getMessage());
                     executeButton.setDisable(false);

@@ -1,11 +1,10 @@
 package org.peacetalk.jmcp.server;
 
-
 import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.protocol.InitializationHandler;
 import org.peacetalk.jmcp.core.protocol.McpServer;
+import org.peacetalk.jmcp.core.protocol.ToolsHandler;
 import org.peacetalk.jmcp.jdbc.JdbcToolProvider;
-import org.peacetalk.jmcp.jdbc.JdbcToolsHandler;
 import org.peacetalk.jmcp.transport.stdio.StdioTransport;
 
 /**
@@ -32,7 +31,7 @@ public class Main {
             mcpServer.registerHandler(new InitializationHandler());
 
             // Register tools handler with the tool provider
-            JdbcToolsHandler toolsHandler = new JdbcToolsHandler();
+            ToolsHandler toolsHandler = new ToolsHandler();
             toolsHandler.registerToolProvider(toolProvider);
             mcpServer.registerHandler(toolsHandler);
 

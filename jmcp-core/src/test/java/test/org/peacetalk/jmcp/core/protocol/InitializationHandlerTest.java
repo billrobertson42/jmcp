@@ -7,6 +7,8 @@ import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import org.peacetalk.jmcp.core.protocol.InitializationHandler;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.Set;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class InitializationHandlerTest {
@@ -15,15 +17,18 @@ class InitializationHandlerTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
-    void testCanHandleInitialize() {
-        assertTrue(handler.canHandle("initialize"));
+    void testSupportsInitialize() {
+        Set<String> supported = handler.getSupportedMethods();
+        assertTrue(supported.contains("initialize"));
     }
 
     @Test
-    void testCannotHandleOtherMethods() {
-        assertFalse(handler.canHandle("tools/list"));
-        assertFalse(handler.canHandle("tools/call"));
-        assertFalse(handler.canHandle("unknown"));
+    void testDoesNotSupportOtherMethods() {
+        Set<String> supported = handler.getSupportedMethods();
+        assertFalse(supported.contains("tools/list"));
+        assertFalse(supported.contains("tools/call"));
+        assertFalse(supported.contains("unknown"));
+        assertEquals(1, supported.size()); // Only "initialize" is supported
     }
 
     @Test

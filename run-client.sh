@@ -13,4 +13,5 @@ done
 
 # Run with java using module path
 java --module-path "$MODULE_PATH" $* \
+    --enable-native-access=javafx.graphics \
     --module org.peacetalk.jmcp.client/org.peacetalk.jmcp.client.McpClientApp

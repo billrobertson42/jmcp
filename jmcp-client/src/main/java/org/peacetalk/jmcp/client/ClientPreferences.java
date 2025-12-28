@@ -46,7 +46,9 @@ public class ClientPreferences {
         try {
             preferences.clear();
         } catch (Exception e) {
-            // Ignore - preferences may not exist
+            // Log but don't fail - preferences may not exist or be corrupted
+            System.err.println("Error clearing preferences: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 }

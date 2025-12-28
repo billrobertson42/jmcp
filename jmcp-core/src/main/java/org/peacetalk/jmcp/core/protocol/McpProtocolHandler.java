@@ -3,6 +3,8 @@ package org.peacetalk.jmcp.core.protocol;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 
+import java.util.Set;
+
 /**
  * Interface for MCP protocol handlers (tools, resources, prompts)
  */
@@ -16,8 +18,11 @@ public interface McpProtocolHandler {
     JsonRpcResponse handle(JsonRpcRequest request);
 
     /**
-     * Check if this handler can process the given method
+     * Get the set of methods this handler supports.
+     * This is called once during handler registration to build the dispatch table.
+     *
+     * @return Set of method names this handler can process
      */
-    boolean canHandle(String method);
+    Set<String> getSupportedMethods();
 }
 

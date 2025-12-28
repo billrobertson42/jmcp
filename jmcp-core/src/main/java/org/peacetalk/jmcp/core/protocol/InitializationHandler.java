@@ -2,6 +2,8 @@ package org.peacetalk.jmcp.core.protocol;
 
 import org.peacetalk.jmcp.core.model.*;
 
+import java.util.Set;
+
 /**
  * Handler for MCP initialization protocol
  */
@@ -10,8 +12,8 @@ public class InitializationHandler implements McpProtocolHandler {
     private static final String PROTOCOL_VERSION = "2024-11-05";
 
     @Override
-    public boolean canHandle(String method) {
-        return method.equals("initialize");
+    public Set<String> getSupportedMethods() {
+        return Set.of("initialize");
     }
 
     @Override

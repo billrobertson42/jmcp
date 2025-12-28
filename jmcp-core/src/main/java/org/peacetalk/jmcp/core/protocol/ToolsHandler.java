@@ -1,34 +1,63 @@
-package org.peacetalk.jmcp.jdbc;
+package org.peacetalk.jmcp.core.protocol;
 
 import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.model.*;
-import org.peacetalk.jmcp.core.protocol.McpProtocolHandler;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * MCP protocol handler for tools provided by ToolProviders
+ * Generic MCP protocol handler for tools provided by ToolProviders.
+ * This handler aggregates tools from multiple providers and handles
+ * tools/list and tools/call requests.
+ *
+ * Uses O(1) HashMap lookup for tool dispatch by building an index
+ * during provider registration.
  */
-public class JdbcToolsHandler implements McpProtocolHandler {
+public class ToolsHandler implements McpProtocolHandler {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<ToolProvider> toolProviders;
+    private final Map<String, Tool> toolIndex;
 
-    public JdbcToolsHandler() {
+    public ToolsHandler() {
         this.toolProviders = new ArrayList<>();
+        this.toolIndex = new HashMap<>();
     }
 
+    /**
+     * Register a tool provider with this handler.
+     * All tools from the provider will be available through this handler.
+     * Builds an index of tool names for O(1) lookup during tool calls.
+     *
+     * @param provider The tool provider to register
+     * @throws IllegalStateException if a tool with duplicate name is registered
+     */
     public void registerToolProvider(ToolProvider provider) {
         toolProviders.add(provider);
+
+        // Build index for O(1) tool lookup
+        for (Tool tool : provider.getTools()) {
+            String toolName = tool.getName();
+            if (toolIndex.containsKey(toolName)) {
+                throw new IllegalStateException(
+                    "Tool '" + toolName + "' is already registered. " +
+                    "Tool names must be unique across all providers."
+                );
+            }
+            toolIndex.put(toolName, tool);
+        }
     }
 
     @Override
-    public boolean canHandle(String method) {
-        return method.equals("tools/list") || method.equals("tools/call");
+    public Set<String> getSupportedMethods() {
+        return Set.of("tools/list", "tools/call");
     }
 
     @Override
@@ -49,6 +78,7 @@ public class JdbcToolsHandler implements McpProtocolHandler {
     private JsonRpcResponse handleListTools(JsonRpcRequest request) {
         List<org.peacetalk.jmcp.core.model.Tool> toolList = new ArrayList<>();
 
+        // Aggregate tools from all registered providers
         for (ToolProvider provider : toolProviders) {
             for (Tool tool : provider.getTools()) {
                 toolList.add(new org.peacetalk.jmcp.core.model.Tool(
@@ -72,17 +102,8 @@ public class JdbcToolsHandler implements McpProtocolHandler {
             JsonNode arguments = callRequest.arguments() != null ?
                 callRequest.arguments() : MAPPER.createObjectNode();
 
-            // Find the tool across all providers
-            Tool tool = null;
-            for (ToolProvider provider : toolProviders) {
-                tool = provider.getTools().stream()
-                    .filter(t -> t.getName().equals(toolName))
-                    .findFirst()
-                    .orElse(null);
-                if (tool != null) {
-                    break;
-                }
-            }
+            // O(1) lookup in the tool index
+            Tool tool = toolIndex.get(toolName);
 
             if (tool == null) {
                 return JsonRpcResponse.error(request.id(),

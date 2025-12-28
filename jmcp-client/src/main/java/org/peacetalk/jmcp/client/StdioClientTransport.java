@@ -80,6 +80,7 @@ public class StdioClientTransport implements AutoCloseable {
                 // Server process ended or stream closed
                 if (serverProcess != null && serverProcess.isAlive()) {
                     System.err.println("Error reading server stderr: " + e.getMessage());
+                    e.printStackTrace(System.err);
                 }
             }
         }, "stderr-reader");
@@ -93,6 +94,7 @@ public class StdioClientTransport implements AutoCloseable {
         } catch (Exception e) {
             // Don't let listener exceptions break the stderr reading
             System.err.println("Listener error on stderr: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 
@@ -182,6 +184,7 @@ public class StdioClientTransport implements AutoCloseable {
         } catch (Exception e) {
             // Don't let listener exceptions break the response handling
             System.err.println("Listener error on response received: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 
@@ -191,6 +194,7 @@ public class StdioClientTransport implements AutoCloseable {
         } catch (Exception e) {
             // Don't let listener exceptions break the request
             System.err.println("Listener error on request sent: " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 
@@ -204,6 +208,7 @@ public class StdioClientTransport implements AutoCloseable {
             } catch (Exception e) {
                 // Don't let listener exceptions cause more problems
                 System.err.println("Listener error on error notification: " + e.getMessage());
+                e.printStackTrace(System.err);
             }
         }
     }
@@ -217,33 +222,92 @@ public class StdioClientTransport implements AutoCloseable {
 
     @Override
     public void close() {
-        if (writer != null) {
-            writer.close();
-        }
-        if (reader != null) {
-            try {
-                reader.close();
-            } catch (IOException e) {
-                // Ignore
-            }
-        }
-        if (stderrReader != null) {
-            try {
-                stderrReader.close();
-            } catch (IOException e) {
-                // Ignore
-            }
-        }
+        // Step 1: Terminate the process tree (including all child processes)
+        // This is important because run.sh spawns a java subprocess that would become orphaned
         if (serverProcess != null && serverProcess.isAlive()) {
-            serverProcess.destroy();
             try {
-                serverProcess.waitFor();
+                ProcessHandle processHandle = serverProcess.toHandle();
+
+                // First, destroy all descendant processes (children, grandchildren, etc.)
+                processHandle.descendants().forEach(descendant -> {
+                    System.err.println("Destroying descendant process: " + descendant.pid());
+                    descendant.destroy();
+                });
+
+                // Then destroy the main process
+                serverProcess.destroy();
+
+                // Wait up to 2 seconds for graceful shutdown
+                if (!serverProcess.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                    // Force kill all descendants
+                    processHandle.descendants().forEach(descendant -> {
+                        System.err.println("Force killing descendant process: " + descendant.pid());
+                        descendant.destroyForcibly();
+                    });
+
+                    // Force kill the main process
+                    serverProcess.destroyForcibly();
+
+                    // Give it 1 more second after force kill
+                    serverProcess.waitFor(1, java.util.concurrent.TimeUnit.SECONDS);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                // Force kill on interrupt
+                if (serverProcess != null) {
+                    try {
+                        ProcessHandle processHandle = serverProcess.toHandle();
+                        processHandle.descendants().forEach(ProcessHandle::destroyForcibly);
+                    } catch (Exception ex) {
+                        // Ignore - best effort
+                    }
+                    serverProcess.destroyForcibly();
+                }
+            } catch (Exception e) {
+                System.err.println("Error destroying process: " + e.getMessage());
+                e.printStackTrace(System.err);
+            }
+        }
+        serverProcess = null;
+
+        // Step 2: Wait for stderr reader thread to finish naturally
+        // (it will exit when the stream closes due to process termination)
+        if (stderrReaderThread != null && stderrReaderThread.isAlive()) {
+            try {
+                stderrReaderThread.join(1000);
+                if (stderrReaderThread.isAlive()) {
+                    System.err.println("WARNING: stderr reader thread did not exit after 1 second");
+                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
         }
-        if (stderrReaderThread != null && stderrReaderThread.isAlive()) {
-            stderrReaderThread.interrupt();
+        stderrReaderThread = null;
+
+        // Step 3: Close streams explicitly (should already be closed by process termination)
+        if (writer != null) {
+            try {
+                writer.close();
+            } catch (Exception e) {
+                // Ignore - stream should already be closed
+            }
+            writer = null;
+        }
+        if (reader != null) {
+            try {
+                reader.close();
+            } catch (Exception e) {
+                // Ignore - stream should already be closed
+            }
+            reader = null;
+        }
+        if (stderrReader != null) {
+            try {
+                stderrReader.close();
+            } catch (Exception e) {
+                // Ignore - stream should already be closed
+            }
+            stderrReader = null;
         }
     }
 }
