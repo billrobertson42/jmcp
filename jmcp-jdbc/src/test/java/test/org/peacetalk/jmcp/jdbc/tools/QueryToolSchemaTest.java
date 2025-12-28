@@ -1,14 +1,11 @@
 package test.org.peacetalk.jmcp.jdbc.tools;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import com.networknt.schema.Schema;
-import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.SpecificationVersion;
-import com.networknt.schema.InputFormat;
+import com.networknt.schema.*;
 import com.networknt.schema.Error;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.tools.QueryTool;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 

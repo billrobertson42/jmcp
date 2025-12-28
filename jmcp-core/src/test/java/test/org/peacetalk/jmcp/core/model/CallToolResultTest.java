@@ -1,9 +1,9 @@
 package test.org.peacetalk.jmcp.core.model;
 
-import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.CallToolResult;
 import org.peacetalk.jmcp.core.model.Content;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 

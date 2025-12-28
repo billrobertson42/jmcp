@@ -36,7 +36,8 @@ public class GetRowCountTool implements JdbcTool {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
                 "table", new StringProperty("The table name"),
-                "schema", new StringProperty("Optional schema name")
+                "schema", new StringProperty("Optional schema name"),
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
             ),
             List.of("table")
         );

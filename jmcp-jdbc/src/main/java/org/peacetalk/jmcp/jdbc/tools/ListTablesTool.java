@@ -36,7 +36,8 @@ public class ListTablesTool implements JdbcTool {
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "schema", new StringProperty("Optional schema/catalog name to filter tables")
+                "schema", new StringProperty("Optional schema/catalog name to filter tables"),
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
             )
         );
 
@@ -45,7 +46,7 @@ public class ListTablesTool implements JdbcTool {
 
     @Override
     public Object execute(JsonNode params, ConnectionContext context) throws Exception {
-        String schemaPattern = params.has("schema") ? params.get("schema").asText() : null;
+        String schemaPattern = params.has("schema") ? params.get("schema").asString() : null;
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();

@@ -4,12 +4,13 @@
 
 cd "$(dirname "$0")"
 
-# Build if needed
-if [ ! -f "jmcp-client/target/jmcp-client-1.0-SNAPSHOT.jar" ]; then
-    echo "Building project..."
-    mvn clean package -DskipTests -pl jmcp-client -am
-fi
+MODULE_PATH=jmcp-client/target/jmcp-client-1.0.0-SNAPSHOT.jar
+MODULES_DIR=jmcp-client/target/dependency
 
-# Run with JavaFX Maven plugin
-exec mvn -X -pl jmcp-client javafx:run
+for jarfile in "${MODULES_DIR}"/*.jar; do
+    MODULE_PATH="${MODULE_PATH}:${jarfile}"
+done
 
+# Run with java using module path
+java --module-path "$MODULE_PATH" $* \
+    --module org.peacetalk.jmcp.client/org.peacetalk.jmcp.client.McpClientApp

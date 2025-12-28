@@ -66,13 +66,14 @@
 
 /* ===== TEXT AREAS ===== */
 .text-area {
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
     -fx-font-family: "Monospace", "Courier New", monospace;
 }
 
 .text-area .content {
     -fx-background-color: white;
     -fx-padding: 8px;
+    -fx-text-fill: #000000; /* Pure black for maximum contrast */
 }
 
 .text-area .scroll-pane {
@@ -83,19 +84,39 @@
 #toolDescriptionArea {
     -fx-font-family: "System", "Segoe UI", "Helvetica", sans-serif;
     -fx-font-size: 14px;
-    -fx-text-fill: #2c2c2c;
+}
+
+#toolDescriptionArea .content {
+    -fx-text-fill: #1a1a1a; /* Very dark gray for description */
 }
 
 #toolSchemaArea {
     -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
     -fx-font-size: 13px;
-    -fx-text-fill: #1a1a1a;
+}
+
+#toolSchemaArea .content {
+    -fx-text-fill: #000000; /* Pure black for schema */
 }
 
 #resultArea {
     -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
+    -fx-font-size: 14px; /* Increased from 13px */
+}
+
+#resultArea .content {
+    -fx-text-fill: #000000; /* Pure black for results - maximum readability */
+    -fx-background-color: #ffffff; /* Pure white background */
+}
+
+#communicationLogArea {
+    -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
     -fx-font-size: 13px;
-    -fx-text-fill: #1a1a1a;
+}
+
+#communicationLogArea .content {
+    -fx-text-fill: #000000; /* Pure black for log - maximum readability */
+    -fx-background-color: #ffffff; /* Pure white background */
 }
 
 /* ===== BUTTONS ===== */

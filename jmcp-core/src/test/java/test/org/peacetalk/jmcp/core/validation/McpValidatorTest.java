@@ -1,10 +1,10 @@
 package test.org.peacetalk.jmcp.core.validation;
 
+import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.*;
+import org.peacetalk.jmcp.core.validation.McpValidator;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
-import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.core.validation.McpValidator;
 
 import java.util.Set;
 

@@ -1,10 +1,10 @@
 package test.org.peacetalk.jmcp.core.model;
 
-import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.Content;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 

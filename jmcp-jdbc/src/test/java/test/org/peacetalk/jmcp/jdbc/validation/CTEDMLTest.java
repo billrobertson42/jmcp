@@ -3,7 +3,8 @@ package test.org.peacetalk.jmcp.jdbc.validation;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.validation.ReadOnlySqlValidator;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Quick test to verify CTE DML detection works

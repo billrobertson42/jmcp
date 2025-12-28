@@ -1,6 +1,7 @@
 package org.peacetalk.jmcp.jdbc.tools;
 
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
+import org.peacetalk.jmcp.core.schema.StringProperty;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.JdbcTool;
 import org.peacetalk.jmcp.jdbc.tools.results.SchemaInfo;
@@ -33,8 +34,12 @@ public class ListSchemasTool implements JdbcTool {
 
     @Override
     public JsonNode getInputSchema() {
-        // No parameters required for this tool
-        ObjectSchema schema = new ObjectSchema(Map.of());
+        // Optional database_id parameter
+        ObjectSchema schema = new ObjectSchema(
+            Map.of(
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+            )
+        );
         return MAPPER.valueToTree(schema);
     }
 

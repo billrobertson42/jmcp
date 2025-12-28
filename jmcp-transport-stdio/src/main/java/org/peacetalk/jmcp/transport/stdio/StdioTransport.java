@@ -3,7 +3,10 @@ package org.peacetalk.jmcp.transport.stdio;
 import org.peacetalk.jmcp.core.transport.McpRequestHandler;
 import org.peacetalk.jmcp.core.transport.McpTransport;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -33,9 +36,15 @@ public class StdioTransport implements McpTransport {
                         continue;
                     }
 
+                    System.err.println("** Received: '" + line + "'");
+                    System.err.flush();
+
                     String response = handler.handleRequest(line);
                     writer.println(response);
                     writer.flush();
+
+                    System.err.println("** Sent: '" + response + "'");
+                    System.err.flush();
                 }
             } catch (IOException e) {
                 if (running.get()) {

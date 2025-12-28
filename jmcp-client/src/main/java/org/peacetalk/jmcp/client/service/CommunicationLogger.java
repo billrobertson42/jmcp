@@ -1,8 +1,11 @@
 package org.peacetalk.jmcp.client.service;
 
-import tools.jackson.databind.ObjectMapper;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
+import tools.jackson.databind.ObjectMapper;
+
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * Formats and logs communication events between client and server.
@@ -48,6 +51,13 @@ public class CommunicationLogger {
         if (exception != null) {
             log.append("Exception: ").append(exception.getClass().getSimpleName()).append("\n");
             log.append("Message: ").append(exception.getMessage()).append("\n");
+            log.append("\nStack Trace:\n");
+
+            // Get full stack trace as string
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            exception.printStackTrace(pw);
+            log.append(sw.toString());
         }
         log.append("\n");
 

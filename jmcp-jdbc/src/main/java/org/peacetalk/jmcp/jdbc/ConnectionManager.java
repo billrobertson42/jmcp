@@ -3,23 +3,57 @@ package org.peacetalk.jmcp.jdbc;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.sql.Connection;
 import java.sql.Driver;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages JDBC connections with isolated classloaders for drivers
  */
-public class ConnectionManager {
+public class ConnectionManager implements ConnectionContextResolver {
 
     private final JdbcDriverManager driverManager;
     private final Map<String, ConnectionPool> pools;
+    private String defaultConnectionId;
+    private boolean exposeUrls;
 
     public ConnectionManager(JdbcDriverManager driverManager) {
         this.driverManager = driverManager;
         this.pools = new ConcurrentHashMap<>();
+        this.defaultConnectionId = "default";
+        this.exposeUrls = false;  // Default to false for security
+    }
+
+    /**
+     * Set the default connection ID
+     */
+    public void setDefaultConnectionId(String defaultConnectionId) {
+        this.defaultConnectionId = defaultConnectionId;
+    }
+
+    /**
+     * Get the default connection ID
+     */
+    public String getDefaultConnectionId() {
+        return defaultConnectionId;
+    }
+
+    /**
+     * Set whether to expose JDBC URLs in connection listings
+     */
+    public void setExposeUrls(boolean exposeUrls) {
+        this.exposeUrls = exposeUrls;
+    }
+
+    /**
+     * Get whether JDBC URLs are exposed
+     */
+    public boolean isExposeUrls() {
+        return exposeUrls;
     }
 
     /**
@@ -39,7 +73,7 @@ public class ConnectionManager {
         Driver driver = classLoader.loadDriverClass(driverClassName);
 
         // Create connection pool
-        ConnectionPool pool = new ConnectionPool(connectionId, jdbcUrl, username, password, driver, classLoader);
+        ConnectionPool pool = new ConnectionPool(connectionId, databaseType, jdbcUrl, username, password, driver, classLoader);
         pools.put(connectionId, pool);
     }
 
@@ -52,6 +86,25 @@ public class ConnectionManager {
             throw new IllegalArgumentException("Connection not found: " + connectionId);
         }
         return pool;
+    }
+
+    @Override
+    public ConnectionContext getConnectionContext(String connectionId) {
+        return getContext(connectionId);
+    }
+
+    /**
+     * List all available connections with sanitized URLs
+     */
+    public List<ConnectionInfo> listConnections() {
+        return pools.values().stream()
+            .map(pool -> new ConnectionInfo(
+                pool.getConnectionId(),
+                JdbcUrlSanitizer.getExposableUrl(pool.getJdbcUrl(), exposeUrls),
+                pool.getUsername(),
+                pool.getDatabaseType()
+            ))
+            .toList();
     }
 
     /**
@@ -91,12 +144,18 @@ public class ConnectionManager {
      */
     private static class ConnectionPool implements ConnectionContext {
         private final String connectionId;
+        private final String databaseType;
+        private final String jdbcUrl;
+        private final String username;
         private final HikariDataSource dataSource;
         private final JdbcDriverManager.DriverClassLoader classLoader;
 
-        public ConnectionPool(String connectionId, String jdbcUrl, String username,
+        public ConnectionPool(String connectionId, String databaseType, String jdbcUrl, String username,
                             String password, Driver driver, JdbcDriverManager.DriverClassLoader classLoader) {
             this.connectionId = connectionId;
+            this.databaseType = databaseType;
+            this.jdbcUrl = jdbcUrl;
+            this.username = username;
             this.classLoader = classLoader;
 
             HikariConfig config = new HikariConfig();
@@ -132,6 +191,18 @@ public class ConnectionManager {
 
         public String getConnectionId() {
             return connectionId;
+        }
+
+        public String getDatabaseType() {
+            return databaseType;
+        }
+
+        public String getJdbcUrl() {
+            return jdbcUrl;
+        }
+
+        public String getUsername() {
+            return username;
         }
 
         public void close() {

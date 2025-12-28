@@ -43,7 +43,8 @@ public class PreviewTableTool implements JdbcTool {
             Map.of(
                 "table", new StringProperty("The table name"),
                 "schema", new StringProperty("Optional schema name"),
-                "limit", new IntegerProperty("Number of rows to return (default 10, max 100)", 1, MAX_LIMIT)
+                "limit", new IntegerProperty("Number of rows to return (default 10, max 100)", 1, MAX_LIMIT),
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
             ),
             List.of("table")
         );

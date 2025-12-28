@@ -3,7 +3,7 @@ package test.org.peacetalk.jmcp.jdbc.driver;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.driver.DriverCoordinates;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 class DriverCoordinatesTest {

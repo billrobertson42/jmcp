@@ -43,7 +43,8 @@ public class QueryTool implements JdbcTool {
                 "parameters", new ArrayProperty(
                     "Optional query parameters for prepared statement",
                     new StringProperty("Parameter value")
-                )
+                ),
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
             ),
             List.of("sql")
         );

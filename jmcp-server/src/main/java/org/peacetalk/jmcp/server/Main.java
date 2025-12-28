@@ -1,53 +1,29 @@
 package org.peacetalk.jmcp.server;
 
 
+import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.protocol.InitializationHandler;
 import org.peacetalk.jmcp.core.protocol.McpServer;
-import org.peacetalk.jmcp.jdbc.ConnectionManager;
+import org.peacetalk.jmcp.jdbc.JdbcToolProvider;
 import org.peacetalk.jmcp.jdbc.JdbcToolsHandler;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
-import org.peacetalk.jmcp.jdbc.tools.*;
 import org.peacetalk.jmcp.transport.stdio.StdioTransport;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 /**
  * Main entry point for JDBC MCP Server
  */
 public class Main {
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
+        ToolProvider toolProvider = null;
+        StdioTransport transport = null;
+
         try {
-            // Setup driver cache directory
-            Path driverCacheDir = Paths.get(System.getProperty("user.home"), ".jmcp", "drivers");
-            Files.createDirectories(driverCacheDir);
+            // Initialize JDBC tool provider (it will load its own configuration)
+            toolProvider = new JdbcToolProvider();
+            toolProvider.initialize();
 
-            // Initialize driver manager
-            JdbcDriverManager driverManager = new JdbcDriverManager(driverCacheDir);
-
-            // Initialize connection manager
-            ConnectionManager connectionManager = new ConnectionManager(driverManager);
-
-            // Load configuration
-            Configuration config = loadConfiguration();
-
-            // Register connections from config
-            for (ConnectionConfig conn : config.connections()) {
-                System.err.println("Registering connection: " + conn.id());
-                connectionManager.registerConnection(
-                    conn.id(),
-                    conn.databaseType(),
-                    conn.jdbcUrl(),
-                    conn.username(),
-                    conn.password()
-                );
-            }
+            System.err.println("Initialized tool provider: " + toolProvider.getName());
+            System.err.println("Available tools: " + toolProvider.getTools().size());
 
             // Setup MCP server
             McpServer mcpServer = new McpServer();
@@ -55,38 +31,29 @@ public class Main {
             // Register initialization handler
             mcpServer.registerHandler(new InitializationHandler());
 
-            // Register JDBC tools handler
-
+            // Register tools handler with the tool provider
             JdbcToolsHandler toolsHandler = new JdbcToolsHandler();
-            toolsHandler.registerTool(new QueryTool());
-            toolsHandler.registerTool(new ListTablesTool());
-            toolsHandler.registerTool(new ListSchemasTool());
-            toolsHandler.registerTool(new DescribeTableTool());
-            toolsHandler.registerTool(new GetRowCountTool());
-            toolsHandler.registerTool(new PreviewTableTool());
-
-            // Register connections with tools handler
-            for (ConnectionConfig conn : config.connections()) {
-                toolsHandler.registerConnection(conn.id(), connectionManager.getContext(conn.id()));
-            }
-
+            toolsHandler.registerToolProvider(toolProvider);
             mcpServer.registerHandler(toolsHandler);
 
             // Start stdio transport
-            StdioTransport transport = new StdioTransport();
+            transport = new StdioTransport();
 
             System.err.println("JDBC MCP Server starting...");
-            System.err.println("Driver cache: " + driverCacheDir);
-            System.err.println("Connections: " + config.connections().length);
+
+            // Setup final references for shutdown hook
+            final ToolProvider finalToolProvider = toolProvider;
+            final StdioTransport finalTransport = transport;
 
             // Add shutdown hook
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.err.println("Shutting down...");
                 try {
-                    transport.stop();
-                    connectionManager.closeAll();
+                    finalTransport.stop();
+                    finalToolProvider.shutdown();
                 } catch (Exception e) {
                     System.err.println("Error during shutdown: " + e.getMessage());
+                    e.printStackTrace(System.err);
                 }
             }));
 
@@ -97,42 +64,30 @@ public class Main {
 
         } catch (Exception e) {
             System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace();
+            e.printStackTrace(System.err);
+
+            // Clean up on error
+            if (toolProvider != null) {
+                try {
+                    toolProvider.shutdown();
+                } catch (Exception ex) {
+                    System.err.println("Error during cleanup: " + ex.getMessage());
+                    ex.printStackTrace(System.err);
+                }
+            }
+            if (transport != null) {
+                try {
+                    transport.stop();
+                } catch (Exception ex) {
+                    System.err.println("Error stopping transport: " + ex.getMessage());
+                    ex.printStackTrace(System.err);
+                }
+            }
+
             System.exit(1);
         }
     }
 
-    private static Configuration loadConfiguration() throws IOException {
-        // Try to load from config file
-        Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
 
-        if (Files.exists(configPath)) {
-            System.err.println("Loading configuration from: " + configPath);
-            JsonNode configNode = MAPPER.readTree(configPath.toFile());
-            return MAPPER.treeToValue(configNode, Configuration.class);
-        }
-
-        // Try environment variable
-        String configEnv = System.getenv("jmcp_CONFIG");
-        if (configEnv != null) {
-            System.err.println("Loading configuration from jmcp_CONFIG environment variable");
-            JsonNode configNode = MAPPER.readTree(configEnv);
-            return MAPPER.treeToValue(configNode, Configuration.class);
-        }
-
-        // Use default empty configuration
-        System.err.println("No configuration found, using defaults");
-        return new Configuration(new ConnectionConfig[0]);
-    }
-
-    public record Configuration(ConnectionConfig[] connections) {}
-
-    public record ConnectionConfig(
-        String id,
-        String databaseType,
-        String jdbcUrl,
-        String username,
-        String password
-    ) {}
 }
 

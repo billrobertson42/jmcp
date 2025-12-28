@@ -12,4 +12,6 @@ public interface CommunicationListener {
     void onResponseReceived(JsonRpcResponse response);
 
     void onError(String message, Exception exception);
+
+    void onServerStderr(String line);
 }

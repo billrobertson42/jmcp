@@ -1,7 +1,5 @@
 package org.peacetalk.jmcp.client;
 
-import org.peacetalk.jmcp.client.ui.ToolArgumentFormBuilder;
-import tools.jackson.databind.ObjectMapper;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -9,12 +7,14 @@ import javafx.scene.control.*;
 import javafx.scene.layout.VBox;
 import org.peacetalk.jmcp.client.service.CommunicationLogger;
 import org.peacetalk.jmcp.client.service.McpService;
+import org.peacetalk.jmcp.client.ui.ToolArgumentFormBuilder;
 import org.peacetalk.jmcp.client.ui.ToolListCell;
 import org.peacetalk.jmcp.client.ui.ValueParser;
 import org.peacetalk.jmcp.core.model.CallToolResult;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import org.peacetalk.jmcp.core.model.Tool;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -31,13 +31,13 @@ public class McpClientController {
     @FXML private Button connectButton;
     @FXML private Button disconnectButton;
     @FXML private Label statusLabel;
-    @FXML private ListView<Tool> toolsList;
+    @FXML private ComboBox<Tool> toolsComboBox;
     @FXML private TextArea toolDescriptionArea;
-    @FXML private TextArea toolSchemaArea;
     @FXML private VBox argumentsBox;
     @FXML private Button executeButton;
     @FXML private TextArea resultArea;
     @FXML private TextArea communicationLogArea;
+    @FXML private TextArea serverStderrArea;
     @FXML private Label workingDirectoryLabel;
 
     // Services and Helpers
@@ -53,11 +53,12 @@ public class McpClientController {
 
     @FXML
     public void initialize() {
-        // Setup tool list cell factory
-        toolsList.setCellFactory(listView -> new ToolListCell());
+        // Setup tool ComboBox with custom cell factory for display
+        toolsComboBox.setButtonCell(new ToolListCell());
+        toolsComboBox.setCellFactory(listView -> new ToolListCell());
 
-        // Setup tool list selection
-        toolsList.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
+        // Setup tool selection listener
+        toolsComboBox.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             if (newVal != null) {
                 onToolSelected(newVal);
             }
@@ -113,6 +114,11 @@ public class McpClientController {
                         String logEntry = communicationLogger.formatError(message, exception);
                         appendToCommunicationLog(logEntry);
                     }
+
+                    @Override
+                    public void onServerStderr(String line) {
+                        appendToServerStderr(line);
+                    }
                 };
 
                 // Connect to server
@@ -123,7 +129,7 @@ public class McpClientController {
                 List<Tool> sortedTools = mcpService.sortTools(tools);
 
                 Platform.runLater(() -> {
-                    toolsList.setItems(FXCollections.observableArrayList(sortedTools));
+                    toolsComboBox.setItems(FXCollections.observableArrayList(sortedTools));
                     statusLabel.setText("Connected: " + mcpService.getServerInfo().serverInfo().name() +
                             " v" + mcpService.getServerInfo().serverInfo().version());
                     updateConnectionState(true);
@@ -150,13 +156,14 @@ public class McpClientController {
     private void onDisconnect() {
         mcpService.disconnect();
 
-        toolsList.getItems().clear();
+        toolsComboBox.getItems().clear();
+        toolsComboBox.getSelectionModel().clearSelection();
         toolDescriptionArea.clear();
-        toolSchemaArea.clear();
         formBuilder.clearForm(argumentsBox);
         argumentFields = null;
         resultArea.clear();
         communicationLogArea.clear();
+        serverStderrArea.clear();
 
         statusLabel.setText("Disconnected");
         updateConnectionState(false);
@@ -172,17 +179,21 @@ public class McpClientController {
     private void onToolSelected(Tool tool) {
         selectedTool = tool;
 
-        // Update description
-        toolDescriptionArea.setText(tool.description());
+        // Update description with schema appended
+        StringBuilder fullDescription = new StringBuilder();
+        fullDescription.append(tool.description());
 
-        // Update schema
+        // Append schema information
         try {
             String prettySchema = MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValueAsString(tool.inputSchema());
-            toolSchemaArea.setText(prettySchema);
+            fullDescription.append("\n\n--- Input Schema ---\n");
+            fullDescription.append(prettySchema);
         } catch (Exception e) {
-            toolSchemaArea.setText("Error displaying schema: " + e.getMessage());
+            fullDescription.append("\n\nError displaying schema: ").append(e.getMessage());
         }
+
+        toolDescriptionArea.setText(fullDescription.toString());
 
         // Build argument input fields
         argumentFields = formBuilder.buildForm(tool, argumentsBox);
@@ -232,7 +243,7 @@ public class McpClientController {
         connectButton.setDisable(connected);
         disconnectButton.setDisable(!connected);
         serverCommandField.setDisable(connected);
-        toolsList.setDisable(!connected);
+        toolsComboBox.setDisable(!connected);
         executeButton.setDisable(!connected);
     }
 
@@ -253,6 +264,17 @@ public class McpClientController {
             communicationLogArea.appendText(logEntry);
             // Auto-scroll to bottom
             communicationLogArea.setScrollTop(Double.MAX_VALUE);
+        });
+    }
+
+    /**
+     * Append a line to the server stderr display
+     */
+    private void appendToServerStderr(String line) {
+        Platform.runLater(() -> {
+            serverStderrArea.appendText(line + "\n");
+            // Auto-scroll to bottom
+            serverStderrArea.setScrollTop(Double.MAX_VALUE);
         });
     }
 }

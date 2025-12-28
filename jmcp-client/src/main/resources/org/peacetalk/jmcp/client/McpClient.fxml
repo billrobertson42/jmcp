@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-
 <BorderPane xmlns="http://javafx.com/javafx/23" xmlns:fx="http://javafx.com/fxml/1"
             fx:controller="org.peacetalk.jmcp.client.McpClientController"
             prefWidth="1000" prefHeight="700"
@@ -30,45 +28,49 @@
 
     <!-- Center: Main Content -->
     <center>
-        <SplitPane dividerPositions="0.3, 0.7" orientation="HORIZONTAL">
+        <SplitPane dividerPositions="0.35" orientation="HORIZONTAL">
 
-            <!-- Left: Tools List -->
-            <VBox spacing="5" style="-fx-padding: 10;">
-                <Label text="Available Tools" styleClass="section-header"/>
-                <ListView fx:id="toolsList" VBox.vgrow="ALWAYS">
-                    <placeholder>
-                        <Label text="Connect to a server to see tools"/>
-                    </placeholder>
-                </ListView>
-            </VBox>
-
-            <!-- Middle: Tool Details and Arguments -->
-            <VBox spacing="10" style="-fx-padding: 10;">
+            <!-- Left: Tool Details Panel -->
+            <VBox spacing="10" style="-fx-padding: 10;" minWidth="300" prefWidth="400">
                 <Label text="Tool Details" styleClass="section-header"/>
 
-                <Label text="Description:"/>
-                <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
-                         prefRowCount="3"/>
-
-                <Label text="Input Schema:"/>
-                <TextArea fx:id="toolSchemaArea" editable="false" wrapText="true"
-                         prefRowCount="5"/>
+                <!-- Tool Selection Dropdown -->
+                <VBox spacing="5">
+                    <Label text="Select Tool:"/>
+                    <ComboBox fx:id="toolsComboBox" maxWidth="Infinity" promptText="Choose a tool...">
+                        <placeholder>
+                            <Label text="Connect to a server to see tools"/>
+                        </placeholder>
+                    </ComboBox>
+                </VBox>
 
                 <Separator/>
 
-                <Label text="Arguments" styleClass="section-header"/>
-                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
-                    <VBox fx:id="argumentsBox" spacing="5" style="-fx-padding: 5;">
-                        <Label text="Select a tool to see arguments"/>
-                    </VBox>
-                </ScrollPane>
+                <!-- Tool Description (includes schema info) -->
+                <VBox spacing="5">
+                    <Label text="Description:"/>
+                    <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
+                             prefRowCount="5"/>
+                </VBox>
 
-                <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
-                       maxWidth="Infinity"/>
+                <Separator/>
+
+                <!-- Arguments Section - now has more space -->
+                <VBox spacing="5" VBox.vgrow="ALWAYS">
+                    <Label text="Arguments" styleClass="section-header"/>
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                        <VBox fx:id="argumentsBox" spacing="5" style="-fx-padding: 5;">
+                            <Label text="Select a tool to see arguments"/>
+                        </VBox>
+                    </ScrollPane>
+
+                    <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
+                           maxWidth="Infinity" styleClass="primary-button"/>
+                </VBox>
             </VBox>
 
-            <!-- Right: Results and Communication Log -->
-            <VBox spacing="5" style="-fx-padding: 10;">
+            <!-- Right: Output Panel -->
+            <VBox spacing="5" style="-fx-padding: 10;" VBox.vgrow="ALWAYS">
                 <Label text="Output" styleClass="section-header"/>
                 <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
                     <Tab text="Result">
@@ -80,6 +82,12 @@
                         <TextArea fx:id="communicationLogArea" editable="false" wrapText="false"
                                  style="-fx-font-family: 'Monospace', 'Consolas', 'Courier New', monospace;">
                             <promptText>JSON-RPC communication will appear here...</promptText>
+                        </TextArea>
+                    </Tab>
+                    <Tab text="Server Stderr">
+                        <TextArea fx:id="serverStderrArea" editable="false" wrapText="true"
+                                 style="-fx-font-family: 'Monospace', 'Consolas', 'Courier New', monospace;">
+                            <promptText>Server error output will appear here...</promptText>
                         </TextArea>
                     </Tab>
                 </TabPane>

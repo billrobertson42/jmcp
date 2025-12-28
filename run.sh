@@ -11,7 +11,17 @@ for jarfile in "${MODULES_DIR}"/*.jar; do
     MODULE_PATH="${MODULE_PATH}:${jarfile}"
 done
 
+# Check if "debug" is in the arguments and replace with debug JVM args
+JVM_ARGS=""
+for arg in "$@"; do
+    if [ "$arg" = "debug" ]; then
+        JVM_ARGS="$JVM_ARGS -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005"
+    else
+        JVM_ARGS="$JVM_ARGS $arg"
+    fi
+done
+
 # Run with java using module path
-java --module-path "$MODULE_PATH" $* \
-    --module org.peacetalk.jmcp.server/org.peacetalk.jmcp.server.Main
+java --module-path "$MODULE_PATH" $JVM_ARGS \
+     --module org.peacetalk.jmcp.server/org.peacetalk.jmcp.server.Main
 

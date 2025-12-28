@@ -1,16 +1,13 @@
 package test.org.peacetalk.jmcp.jdbc.tools;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import com.networknt.schema.Schema;
-import com.networknt.schema.SchemaRegistry;
-import com.networknt.schema.SpecificationVersion;
-import com.networknt.schema.InputFormat;
+import com.networknt.schema.*;
 import com.networknt.schema.Error;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.tools.GetRowCountTool;
 import org.peacetalk.jmcp.jdbc.tools.ListSchemasTool;
 import org.peacetalk.jmcp.jdbc.tools.ListTablesTool;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 

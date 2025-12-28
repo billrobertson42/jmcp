@@ -1,10 +1,10 @@
 package org.peacetalk.jmcp.client.ui;
 
-import tools.jackson.databind.JsonNode;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
 import org.peacetalk.jmcp.core.model.Tool;
+import tools.jackson.databind.JsonNode;
 
 import java.util.HashMap;
 import java.util.Map;

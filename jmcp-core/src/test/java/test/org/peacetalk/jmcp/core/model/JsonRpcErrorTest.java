@@ -3,7 +3,8 @@ package test.org.peacetalk.jmcp.core.model;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class JsonRpcErrorTest {
 

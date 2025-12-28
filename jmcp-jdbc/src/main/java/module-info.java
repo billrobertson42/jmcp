@@ -6,10 +6,14 @@ module org.peacetalk.jmcp.jdbc {
     requires jdbctl;
     requires net.sf.jsqlparser;
 
+    // Public API - only what external modules (jmcp-server) need
     exports org.peacetalk.jmcp.jdbc;
-    exports org.peacetalk.jmcp.jdbc.driver;
-    exports org.peacetalk.jmcp.jdbc.tools;
-    exports org.peacetalk.jmcp.jdbc.tools.results;
+
+    // Internal packages - only exported to test module
+    exports org.peacetalk.jmcp.jdbc.config to org.peacetalk.jmcp.jdbc.test;
+    exports org.peacetalk.jmcp.jdbc.driver to org.peacetalk.jmcp.jdbc.test;
+    exports org.peacetalk.jmcp.jdbc.tools to org.peacetalk.jmcp.jdbc.test;
+    exports org.peacetalk.jmcp.jdbc.tools.results to org.peacetalk.jmcp.jdbc.test;
     exports org.peacetalk.jmcp.jdbc.validation to org.peacetalk.jmcp.jdbc.test;
 }
 

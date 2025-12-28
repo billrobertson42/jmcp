@@ -4,7 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class JsonRpcResponseTest {
 

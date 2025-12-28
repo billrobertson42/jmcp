@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.peacetalk.jmcp.core.Tool;
+import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.model.*;
 import org.peacetalk.jmcp.core.protocol.McpProtocolHandler;
 import tools.jackson.databind.JsonNode;
@@ -7,29 +9,21 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * MCP protocol handler for JDBC tools
+ * MCP protocol handler for tools provided by ToolProviders
  */
 public class JdbcToolsHandler implements McpProtocolHandler {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final List<JdbcTool> tools;
-    private final Map<String, ConnectionContext> connections;
+    private final List<ToolProvider> toolProviders;
 
     public JdbcToolsHandler() {
-        this.tools = new ArrayList<>();
-        this.connections = new ConcurrentHashMap<>();
+        this.toolProviders = new ArrayList<>();
     }
 
-    public void registerTool(JdbcTool tool) {
-        tools.add(tool);
-    }
-
-    public void registerConnection(String connectionId, ConnectionContext context) {
-        connections.put(connectionId, context);
+    public void registerToolProvider(ToolProvider provider) {
+        toolProviders.add(provider);
     }
 
     @Override
@@ -46,19 +40,23 @@ public class JdbcToolsHandler implements McpProtocolHandler {
                 default -> JsonRpcResponse.error(request.id(), JsonRpcError.methodNotFound(request.method()));
             };
         } catch (Exception e) {
+            System.err.println("Error handling request: " + request.method());
+            e.printStackTrace(System.err);
             return JsonRpcResponse.error(request.id(), JsonRpcError.internalError(e.getMessage()));
         }
     }
 
     private JsonRpcResponse handleListTools(JsonRpcRequest request) {
-        List<Tool> toolList = new ArrayList<>();
+        List<org.peacetalk.jmcp.core.model.Tool> toolList = new ArrayList<>();
 
-        for (JdbcTool tool : tools) {
-            toolList.add(new Tool(
-                tool.getName(),
-                tool.getDescription(),
-                tool.getInputSchema()
-            ));
+        for (ToolProvider provider : toolProviders) {
+            for (Tool tool : provider.getTools()) {
+                toolList.add(new org.peacetalk.jmcp.core.model.Tool(
+                    tool.getName(),
+                    tool.getDescription(),
+                    tool.getInputSchema()
+                ));
+            }
         }
 
         ListToolsResult result = new ListToolsResult(toolList);
@@ -74,29 +72,25 @@ public class JdbcToolsHandler implements McpProtocolHandler {
             JsonNode arguments = callRequest.arguments() != null ?
                 callRequest.arguments() : MAPPER.createObjectNode();
 
-            // Find the tool
-            JdbcTool tool = tools.stream()
-                .filter(t -> t.getName().equals(toolName))
-                .findFirst()
-                .orElse(null);
+            // Find the tool across all providers
+            Tool tool = null;
+            for (ToolProvider provider : toolProviders) {
+                tool = provider.getTools().stream()
+                    .filter(t -> t.getName().equals(toolName))
+                    .findFirst()
+                    .orElse(null);
+                if (tool != null) {
+                    break;
+                }
+            }
 
             if (tool == null) {
                 return JsonRpcResponse.error(request.id(),
                     JsonRpcError.invalidParams("Unknown tool: " + toolName));
             }
 
-            // Get connection context
-            String connectionId = arguments.has("connectionId") ?
-                arguments.get("connectionId").asString() : "default";
-
-            ConnectionContext context = connections.get(connectionId);
-            if (context == null) {
-                return JsonRpcResponse.error(request.id(),
-                    JsonRpcError.invalidParams("Connection not found: " + connectionId));
-            }
-
             // Execute the tool
-            Object toolResult = tool.execute(arguments, context);
+            Object toolResult = tool.execute(arguments);
 
             // Convert result to JSON string for content
             String resultJson = MAPPER.writeValueAsString(toolResult);
@@ -108,6 +102,8 @@ public class JdbcToolsHandler implements McpProtocolHandler {
 
         } catch (Exception e) {
             // Return error as MCP tool result
+            System.err.println("Tool execution failed: " + e.getMessage());
+            e.printStackTrace(System.err);
             CallToolResult errorResult = CallToolResult.error("Tool execution failed: " + e.getMessage());
             return JsonRpcResponse.success(request.id(), errorResult);
         }

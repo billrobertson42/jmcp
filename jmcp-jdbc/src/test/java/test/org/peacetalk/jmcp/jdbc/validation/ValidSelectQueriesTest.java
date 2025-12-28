@@ -3,7 +3,8 @@ package test.org.peacetalk.jmcp.jdbc.validation;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.validation.ReadOnlySqlValidator;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Tests for valid SELECT queries that should be allowed by ReadOnlySqlValidator.

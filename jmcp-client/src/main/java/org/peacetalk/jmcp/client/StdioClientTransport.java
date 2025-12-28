@@ -2,6 +2,7 @@ package org.peacetalk.jmcp.client;
 
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
+import tools.jackson.core.exc.StreamReadException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.*;
@@ -19,7 +20,9 @@ public class StdioClientTransport implements AutoCloseable {
 
     private Process serverProcess;
     private BufferedReader reader;
+    private BufferedReader stderrReader;
     private PrintWriter writer;
+    private Thread stderrReaderThread;
     private final String[] command;
     private final List<CommunicationListener> listeners = new CopyOnWriteArrayList<>();
 
@@ -48,13 +51,49 @@ public class StdioClientTransport implements AutoCloseable {
      */
     public void connect() throws IOException {
         ProcessBuilder builder = new ProcessBuilder(command);
-        builder.redirectError(ProcessBuilder.Redirect.INHERIT); // Show server stderr in console
+        // Capture stderr instead of inheriting it
+        builder.redirectError(ProcessBuilder.Redirect.PIPE);
 
         serverProcess = builder.start();
 
         // Setup streams
         reader = new BufferedReader(new InputStreamReader(serverProcess.getInputStream()));
+        stderrReader = new BufferedReader(new InputStreamReader(serverProcess.getErrorStream()));
         writer = new PrintWriter(new OutputStreamWriter(serverProcess.getOutputStream()), true);
+
+        // Start stderr reader thread
+        startStderrReader();
+    }
+
+    /**
+     * Start a background thread to read stderr from the server process
+     */
+    private void startStderrReader() {
+        stderrReaderThread = new Thread(() -> {
+            try {
+                String line;
+                while ((line = stderrReader.readLine()) != null) {
+                    String stderrLine = line;
+                    listeners.forEach(l -> notifyStderr(l, stderrLine));
+                }
+            } catch (IOException e) {
+                // Server process ended or stream closed
+                if (serverProcess != null && serverProcess.isAlive()) {
+                    System.err.println("Error reading server stderr: " + e.getMessage());
+                }
+            }
+        }, "stderr-reader");
+        stderrReaderThread.setDaemon(true);
+        stderrReaderThread.start();
+    }
+
+    private static void notifyStderr(CommunicationListener listener, String line) {
+        try {
+            listener.onServerStderr(line);
+        } catch (Exception e) {
+            // Don't let listener exceptions break the stderr reading
+            System.err.println("Listener error on stderr: " + e.getMessage());
+        }
     }
 
     /**
@@ -80,32 +119,61 @@ public class StdioClientTransport implements AutoCloseable {
         writer.println(requestJson);
         writer.flush();
 
-        // Read response
-        String responseLine;
-        try {
-            responseLine = reader.readLine();
-            if (responseLine == null) {
-                IOException error = new IOException("Server closed connection");
-                notifyError("Server closed connection", error);
-                throw error;
+        // Read response - skip any non-JSON lines (e.g., debug agent output)
+        while (true) {
+            String responseLine;
+            try {
+                responseLine = reader.readLine();
+                if (responseLine == null) {
+                    IOException error = new IOException("Server closed connection");
+                    notifyError("Server closed connection", error);
+                    throw error;
+                }
+            } catch (IOException e) {
+                notifyError("Error reading response", e);
+                throw e;
             }
-        } catch (IOException e) {
-            notifyError("Error reading response", e);
-            throw e;
+
+            // Skip empty lines
+            if (responseLine.trim().isEmpty()) {
+                continue;
+            }
+
+            // Check if line looks like JSON (starts with '{')
+            String trimmed = responseLine.trim();
+            if (!trimmed.startsWith("{")) {
+                // Not JSON - likely debug agent output or other non-protocol message
+                // Check for debug agent message specifically
+                if (trimmed.startsWith("Listening for transport dt_socket")) {
+                    listeners.forEach(l -> notifyStderr(l, "[DEBUG] Server suspended - waiting for debugger to attach"));
+                    listeners.forEach(l -> notifyStderr(l, "[DEBUG] " + trimmed));
+                } else {
+                    // Log other non-JSON output to stderr listeners
+                    String nonJsonLine = responseLine;
+                    listeners.forEach(l -> notifyStderr(l, "[stdout] " + nonJsonLine));
+                }
+                continue;
+            }
+
+            // Try to parse as JSON-RPC response
+            try {
+                JsonRpcResponse response = MAPPER.readValue(responseLine, JsonRpcResponse.class);
+                listeners.forEach(l -> notifyResponseReceived(l, response));
+                return response;
+            } catch (StreamReadException jack) {
+                // JSON parse error - this might be malformed JSON, log and throw
+                if (jack.getMessage().startsWith("Unrecognized token")) {
+                    notifyError("Error parsing response: '" + responseLine + "'", jack);
+                } else {
+                    notifyError("Failed to parse response", jack);
+                }
+                throw jack;
+            } catch (Exception e) {
+                notifyError("Failed to parse response", e);
+                throw new IOException("Failed to parse response: " + e.getMessage(), e);
+            }
         }
 
-        // Parse response
-        JsonRpcResponse response;
-        try {
-            response = MAPPER.readValue(responseLine, JsonRpcResponse.class);
-        } catch (Exception e) {
-            IOException parseError = new IOException("Failed to parse response: " + e.getMessage(), e);
-            notifyError("Failed to parse response", parseError);
-            throw parseError;
-        }
-
-        listeners.forEach(l -> notifyResponseReceived(l, response));
-        return response;
     }
 
     private static void notifyResponseReceived(CommunicationListener listener, JsonRpcResponse response) {
@@ -159,6 +227,13 @@ public class StdioClientTransport implements AutoCloseable {
                 // Ignore
             }
         }
+        if (stderrReader != null) {
+            try {
+                stderrReader.close();
+            } catch (IOException e) {
+                // Ignore
+            }
+        }
         if (serverProcess != null && serverProcess.isAlive()) {
             serverProcess.destroy();
             try {
@@ -166,6 +241,9 @@ public class StdioClientTransport implements AutoCloseable {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
+        }
+        if (stderrReaderThread != null && stderrReaderThread.isAlive()) {
+            stderrReaderThread.interrupt();
         }
     }
 }

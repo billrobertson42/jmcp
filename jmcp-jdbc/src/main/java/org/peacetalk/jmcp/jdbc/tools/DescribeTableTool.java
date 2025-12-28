@@ -38,7 +38,8 @@ public class DescribeTableTool implements JdbcTool {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
                 "table", new StringProperty("The table name to describe"),
-                "schema", new StringProperty("Optional schema name")
+                "schema", new StringProperty("Optional schema name"),
+                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
             ),
             List.of("table")
         );
@@ -48,8 +49,8 @@ public class DescribeTableTool implements JdbcTool {
 
     @Override
     public Object execute(JsonNode params, ConnectionContext context) throws Exception {
-        String tableName = params.get("table").asText();
-        String schemaName = params.has("schema") ? params.get("schema").asText() : null;
+        String tableName = params.get("table").asString();
+        String schemaName = params.has("schema") ? params.get("schema").asString() : null;
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();

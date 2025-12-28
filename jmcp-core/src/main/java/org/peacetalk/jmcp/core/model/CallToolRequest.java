@@ -2,8 +2,8 @@ package org.peacetalk.jmcp.core.model;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import tools.jackson.databind.JsonNode;
 import jakarta.validation.constraints.NotBlank;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Request to call a tool in the Model Context Protocol.
