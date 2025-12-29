@@ -29,6 +29,7 @@
         <bytebuddy.version>1.18.3</bytebuddy.version>
         <hibernate-validator.version>9.0.1.Final</hibernate-validator.version>
         <jakarta-validation.version>3.1.1</jakarta-validation.version>
+        <jakarta-el.version>6.0.1</jakarta-el.version>
         <expressly.version>6.0.0</expressly.version>
         <jsqlparser.version>5.3</jsqlparser.version>
     </properties>
@@ -84,6 +85,11 @@
                 <groupId>org.hibernate.validator</groupId>
                 <artifactId>hibernate-validator</artifactId>
                 <version>${hibernate-validator.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>jakarta.el</groupId>
+                <artifactId>jakarta.el-api</artifactId>
+                <version>${jakarta-el.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.glassfish.expressly</groupId>

@@ -111,6 +111,24 @@ public class McpService {
     }
 
     /**
+     * Ping the server to check if it's still responsive.
+     *
+     * @return true if server responds successfully, false otherwise
+     */
+    public boolean ping() {
+        if (client == null) {
+            return false;
+        }
+
+        try {
+            return client.ping();
+        } catch (Exception e) {
+            System.err.println("Ping failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Cleanup resources when shutting down.
      */
     public void cleanup() {

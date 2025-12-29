@@ -106,7 +106,7 @@ public class StdioClientTransport implements AutoCloseable {
             throw new IllegalStateException("Server process is not running");
         }
 
-        // Create request
+        // Create request with ID
         JsonRpcRequest request = new JsonRpcRequest(
             "2.0",
             REQUEST_ID.getAndIncrement(),
@@ -175,7 +175,33 @@ public class StdioClientTransport implements AutoCloseable {
                 throw new IOException("Failed to parse response: " + e.getMessage(), e);
             }
         }
+    }
 
+    /**
+     * Send a notification (request without id - no response expected).
+     * Notifications do not wait for a response per JSON-RPC 2.0 spec.
+     */
+    public void sendNotification(String method, Object params) throws IOException {
+        if (serverProcess == null || !serverProcess.isAlive()) {
+            throw new IllegalStateException("Server process is not running");
+        }
+
+        // Create notification (no id)
+        JsonRpcRequest notification = new JsonRpcRequest(
+            "2.0",
+            null,  // No ID for notifications
+            method,
+            params
+        );
+
+        listeners.forEach(l -> notifyRequestSent(l, notification));
+
+        // Serialize and send
+        String notificationJson = MAPPER.writeValueAsString(notification);
+        writer.println(notificationJson);
+        writer.flush();
+
+        // No response expected for notifications
     }
 
     private static void notifyResponseReceived(CommunicationListener listener, JsonRpcResponse response) {

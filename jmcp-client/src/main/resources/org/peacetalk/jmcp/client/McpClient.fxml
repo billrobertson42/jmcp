@@ -16,6 +16,7 @@
                 <Label text="Server Command:"/>
                 <TextField fx:id="serverCommandField" HBox.hgrow="ALWAYS" onAction="#onConnect"/>
                 <Button fx:id="connectButton" text="Connect" onAction="#onConnect"/>
+                <Button fx:id="pingButton" text="Ping" onAction="#onPing"/>
                 <Button fx:id="disconnectButton" text="Disconnect" onAction="#onDisconnect"/>
             </HBox>
 
@@ -46,16 +47,13 @@
 
                 <Separator/>
 
-                <!-- Tool Description (includes schema info) -->
-                <VBox spacing="5">
-                    <Label text="Description:"/>
-                    <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
-                             prefRowCount="5"/>
-                </VBox>
+                <!-- Execute Button -->
+                <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
+                       maxWidth="Infinity" styleClass="primary-button"/>
 
                 <Separator/>
 
-                <!-- Arguments Section - now has more space -->
+                <!-- Arguments Section -->
                 <VBox spacing="5" VBox.vgrow="ALWAYS">
                     <Label text="Arguments" styleClass="section-header"/>
                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
@@ -63,9 +61,15 @@
                             <Label text="Select a tool to see arguments"/>
                         </VBox>
                     </ScrollPane>
+                </VBox>
 
-                    <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
-                           maxWidth="Infinity" styleClass="primary-button"/>
+                <Separator/>
+
+                <!-- Tool Description (at bottom) -->
+                <VBox spacing="5">
+                    <Label text="Description:"/>
+                    <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
+                             prefRowCount="5"/>
                 </VBox>
             </VBox>
 

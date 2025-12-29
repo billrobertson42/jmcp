@@ -30,6 +30,7 @@ public class McpClientController {
     // UI Components
     @FXML private TextField serverCommandField;
     @FXML private Button connectButton;
+    @FXML private Button pingButton;
     @FXML private Button disconnectButton;
     @FXML private Label statusLabel;
     @FXML private ComboBox<Tool> toolsComboBox;
@@ -161,6 +162,7 @@ public class McpClientController {
         // Immediately disable all interactive controls to prevent double-clicks
         disconnectButton.setDisable(true);
         connectButton.setDisable(true);
+        pingButton.setDisable(true);
         serverCommandField.setDisable(true);
         toolsComboBox.setDisable(true);
         executeButton.setDisable(true);
@@ -224,6 +226,43 @@ public class McpClientController {
         });
     }
 
+    @FXML
+    private void onPing() {
+        // Disable ping button during ping to prevent rapid clicks
+        pingButton.setDisable(true);
+        statusLabel.setText("Pinging server...");
+
+        // Run ping in background thread
+        Thread pingThread = new Thread(() -> {
+            try {
+                boolean success = mcpService.ping();
+
+                Platform.runLater(() -> {
+                    if (success) {
+                        statusLabel.setText("Connected - Ping successful");
+                        // Show brief success message in result area
+                        resultArea.setText("✓ Server responded to ping");
+                    } else {
+                        statusLabel.setText("Connected - Ping failed");
+                        showError("Server did not respond to ping");
+                    }
+                    pingButton.setDisable(false);
+                });
+
+            } catch (Exception e) {
+                System.err.println("Ping error: " + e.getMessage());
+                e.printStackTrace(System.err);
+                Platform.runLater(() -> {
+                    statusLabel.setText("Connected - Ping error");
+                    showError("Ping failed: " + e.getMessage());
+                    pingButton.setDisable(false);
+                });
+            }
+        });
+        pingThread.setDaemon(true);
+        pingThread.start();
+    }
+
     /**
      * Cleanup when application closes.
      * Runs in background with timeout to avoid blocking app exit.
@@ -273,8 +312,8 @@ public class McpClientController {
 
         toolDescriptionArea.setText(fullDescription.toString());
 
-        // Build argument input fields
-        argumentFields = formBuilder.buildForm(tool, argumentsBox);
+        // Build argument input fields with Enter key action
+        argumentFields = formBuilder.buildForm(tool, argumentsBox, this::onExecute);
 
         executeButton.setDisable(false);
     }
@@ -326,6 +365,7 @@ public class McpClientController {
 
     private void updateConnectionState(boolean connected) {
         connectButton.setDisable(connected);
+        pingButton.setDisable(!connected);
         disconnectButton.setDisable(!connected);
         serverCommandField.setDisable(connected);
         toolsComboBox.setDisable(!connected);

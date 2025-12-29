@@ -41,8 +41,19 @@ public class McpClient implements AutoCloseable {
         // Parse server info
         serverInfo = MAPPER.convertValue(response.result(), InitializeResult.class);
 
-        // Send initialized notification
-        transport.sendRequest("notifications/initialized", new HashMap<>());
+        // Send initialized notification (no response expected)
+        transport.sendNotification("notifications/initialized", new HashMap<>());
+    }
+
+    /**
+     * Ping the server to check if it's responsive.
+     * Returns true if the server responds successfully.
+     */
+    public boolean ping() throws IOException {
+        JsonRpcResponse response = transport.sendRequest("ping", new HashMap<>());
+
+        // Ping should return empty object {}
+        return response.error() == null;
     }
 
     /**

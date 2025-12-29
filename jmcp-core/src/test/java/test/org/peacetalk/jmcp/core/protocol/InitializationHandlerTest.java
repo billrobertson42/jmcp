@@ -28,7 +28,10 @@ class InitializationHandlerTest {
         assertFalse(supported.contains("tools/list"));
         assertFalse(supported.contains("tools/call"));
         assertFalse(supported.contains("unknown"));
-        assertEquals(1, supported.size()); // Only "initialize" is supported
+        assertEquals(3, supported.size()); // "initialize", "notifications/initialized", and "ping"
+        assertTrue(supported.contains("initialize"));
+        assertTrue(supported.contains("notifications/initialized"));
+        assertTrue(supported.contains("ping"));
     }
 
     @Test

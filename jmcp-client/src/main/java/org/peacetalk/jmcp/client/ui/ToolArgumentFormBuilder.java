@@ -19,9 +19,10 @@ public class ToolArgumentFormBuilder {
      *
      * @param tool The tool to build the form for
      * @param container The VBox container to add form fields to
+     * @param onEnterAction Action to execute when Enter is pressed in any field
      * @return Map of field names to TextField controls
      */
-    public Map<String, TextField> buildForm(Tool tool, VBox container) {
+    public Map<String, TextField> buildForm(Tool tool, VBox container, Runnable onEnterAction) {
         Map<String, TextField> argumentFields = new HashMap<>();
 
         container.getChildren().clear();
@@ -47,6 +48,11 @@ public class ToolArgumentFormBuilder {
                 // Create text field
                 TextField textField = new TextField();
                 textField.setPromptText(getPromptText(fieldSchema));
+
+                // Set Enter key action to trigger execute button
+                if (onEnterAction != null) {
+                    textField.setOnAction(event -> onEnterAction.run());
+                }
 
                 argumentFields.put(fieldName, textField);
 

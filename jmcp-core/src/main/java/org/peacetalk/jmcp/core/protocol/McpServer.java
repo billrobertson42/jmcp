@@ -45,6 +45,13 @@ public class McpServer implements McpRequestHandler {
     public String handleRequest(String jsonRpcRequest) {
         try {
             JsonRpcRequest request = objectMapper.readValue(jsonRpcRequest, JsonRpcRequest.class);
+
+            // Notifications have null id - process but don't send response
+            if (request.id() == null) {
+                processNotification(request);
+                return null;
+            }
+
             JsonRpcResponse response = processRequest(request);
             return objectMapper.writeValueAsString(response);
         } catch (Exception e) {
@@ -61,6 +68,28 @@ public class McpServer implements McpRequestHandler {
                 ex.printStackTrace(System.err);
                 return "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Parse error\"}}";
             }
+        }
+    }
+
+    /**
+     * Process a notification (request without id).
+     * Notifications do not receive a response.
+     */
+    private void processNotification(JsonRpcRequest request) {
+        McpProtocolHandler handler = methodHandlers.get(request.method());
+
+        if (handler == null) {
+            // Unknown notification - just log and ignore (per JSON-RPC spec)
+            System.err.println("Received unknown notification: " + request.method());
+            return;
+        }
+
+        try {
+            handler.handle(request);
+        } catch (Exception e) {
+            // Log but don't return error for notifications
+            System.err.println("Error handling notification '" + request.method() + "': " + e.getMessage());
+            e.printStackTrace(System.err);
         }
     }
 

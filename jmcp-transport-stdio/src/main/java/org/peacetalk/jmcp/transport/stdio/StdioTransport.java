@@ -37,8 +37,12 @@ public class StdioTransport implements McpTransport {
                     }
 
                     String response = handler.handleRequest(line);
-                    writer.println(response);
-                    writer.flush();
+
+                    // Only write response if not null (notifications return null)
+                    if (response != null) {
+                        writer.println(response);
+                        writer.flush();
+                    }
                 }
             } catch (IOException e) {
                 if (running.get()) {
