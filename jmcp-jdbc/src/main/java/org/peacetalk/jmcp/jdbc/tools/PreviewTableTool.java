@@ -11,6 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
@@ -61,41 +62,61 @@ public class PreviewTableTool implements JdbcTool {
         // Enforce max limit
         limit = Math.min(limit, MAX_LIMIT);
 
-        String fullTableName = schemaName != null ?
-            schemaName + "." + tableName : tableName;
-
-        // Note: LIMIT syntax varies by database, but most support this
-        String sql = "SELECT * FROM " + fullTableName + " LIMIT " + limit;
-
-        try (Connection conn = context.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            ResultSetMetaData metaData = rs.getMetaData();
-            int columnCount = metaData.getColumnCount();
-
-            // Add column metadata
-            List<ColumnMetadata> columns = new ArrayList<>();
-            for (int i = 1; i <= columnCount; i++) {
-                columns.add(new ColumnMetadata(
-                    metaData.getColumnName(i),
-                    metaData.getColumnTypeName(i)
-                ));
+        try (Connection conn = context.getConnection()) {
+            // If schema is not specified, try to use the default schema
+            if (schemaName == null) {
+                schemaName = conn.getSchema();
             }
 
-            // Add rows
-            List<Map<String, Object>> rows = new ArrayList<>();
-            while (rs.next()) {
-                Map<String, Object> row = new HashMap<>();
+            // Validate that the table exists using DatabaseMetaData to prevent SQL injection
+            DatabaseMetaData metaData = conn.getMetaData();
+            boolean tableExists = false;
+
+            try (ResultSet rs = metaData.getTables(null, schemaName, tableName, new String[]{"TABLE", "VIEW"})) {
+                tableExists = rs.next();
+            }
+
+            if (!tableExists) {
+                throw new java.sql.SQLException("Table '" + tableName + "' does not exist" +
+                    (schemaName != null ? " in schema '" + schemaName + "'" : ""));
+            }
+
+            // Now safe to construct SQL with validated table name
+            String fullTableName = schemaName != null ?
+                schemaName + "." + tableName : tableName;
+
+            // Note: LIMIT syntax varies by database, but most support this
+            String sql = "SELECT * FROM " + fullTableName + " LIMIT " + limit;
+
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+
+                ResultSetMetaData rsMetaData = rs.getMetaData();
+                int columnCount = rsMetaData.getColumnCount();
+
+                // Add column metadata
+                List<ColumnMetadata> columns = new ArrayList<>();
                 for (int i = 1; i <= columnCount; i++) {
-                    String columnName = metaData.getColumnName(i);
-                    Object value = rs.getObject(i);
-                    row.put(columnName, value);
+                    columns.add(new ColumnMetadata(
+                        rsMetaData.getColumnName(i),
+                        rsMetaData.getColumnTypeName(i)
+                    ));
                 }
-                rows.add(row);
-            }
 
-            return new TablePreviewResult(tableName, schemaName, columns, rows, rows.size(), limit);
+                // Add rows
+                List<Map<String, Object>> rows = new ArrayList<>();
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    for (int i = 1; i <= columnCount; i++) {
+                        String columnName = rsMetaData.getColumnName(i);
+                        Object value = rs.getObject(i);
+                        row.put(columnName, value);
+                    }
+                    rows.add(row);
+                }
+
+                return new TablePreviewResult(tableName, schemaName, columns, rows, rows.size(), limit);
+            }
         }
     }
 }

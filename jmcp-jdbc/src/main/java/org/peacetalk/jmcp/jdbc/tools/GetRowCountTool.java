@@ -9,6 +9,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -50,21 +51,41 @@ public class GetRowCountTool implements JdbcTool {
         String tableName = params.get("table").asString();
         String schemaName = params.has("schema") ? params.get("schema").asString() : null;
 
-        String fullTableName = schemaName != null ?
-            schemaName + "." + tableName : tableName;
-
-        String sql = "SELECT COUNT(*) FROM " + fullTableName;
-
-        try (Connection conn = context.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-
-            if (rs.next()) {
-                long count = rs.getLong(1);
-                return new RowCountResult(tableName, schemaName, count);
+        try (Connection conn = context.getConnection()) {
+            // If schema is not specified, try to use the default schema
+            if (schemaName == null) {
+                schemaName = conn.getSchema();
             }
 
-            throw new SQLException("Could not get row count");
+            // Validate that the table exists using DatabaseMetaData to prevent SQL injection
+            DatabaseMetaData metaData = conn.getMetaData();
+            boolean tableExists = false;
+
+            try (ResultSet rs = metaData.getTables(null, schemaName, tableName, new String[]{"TABLE", "VIEW"})) {
+                tableExists = rs.next();
+            }
+
+            if (!tableExists) {
+                throw new SQLException("Table '" + tableName + "' does not exist" +
+                    (schemaName != null ? " in schema '" + schemaName + "'" : ""));
+            }
+
+            // Now safe to construct SQL with validated table name
+            String fullTableName = schemaName != null ?
+                schemaName + "." + tableName : tableName;
+
+            String sql = "SELECT COUNT(*) FROM " + fullTableName;
+
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+
+                if (rs.next()) {
+                    long count = rs.getLong(1);
+                    return new RowCountResult(tableName, schemaName, count);
+                }
+
+                throw new SQLException("Could not get row count");
+            }
         }
     }
 }
