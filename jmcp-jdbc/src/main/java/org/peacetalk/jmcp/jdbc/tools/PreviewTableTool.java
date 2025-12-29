@@ -11,12 +11,8 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -63,27 +59,14 @@ public class PreviewTableTool implements JdbcTool {
         limit = Math.min(limit, MAX_LIMIT);
 
         try (Connection conn = context.getConnection()) {
-            // If schema is not specified, try to use the default schema
-            if (schemaName == null) {
-                schemaName = conn.getSchema();
-            }
+            // Resolve schema name (use provided or default)
+            schemaName = JdbcToolUtils.resolveSchemaName(conn, schemaName);
 
-            // Validate that the table exists using DatabaseMetaData to prevent SQL injection
-            DatabaseMetaData metaData = conn.getMetaData();
-            boolean tableExists = false;
+            // Validate table exists to prevent SQL injection
+            JdbcToolUtils.validateTableExists(conn, schemaName, tableName);
 
-            try (ResultSet rs = metaData.getTables(null, schemaName, tableName, new String[]{"TABLE", "VIEW"})) {
-                tableExists = rs.next();
-            }
-
-            if (!tableExists) {
-                throw new java.sql.SQLException("Table '" + tableName + "' does not exist" +
-                    (schemaName != null ? " in schema '" + schemaName + "'" : ""));
-            }
-
-            // Now safe to construct SQL with validated table name
-            String fullTableName = schemaName != null ?
-                schemaName + "." + tableName : tableName;
+            // Build qualified table name
+            String fullTableName = JdbcToolUtils.buildQualifiedTableName(schemaName, tableName);
 
             // Note: LIMIT syntax varies by database, but most support this
             String sql = "SELECT * FROM " + fullTableName + " LIMIT " + limit;
@@ -91,29 +74,11 @@ public class PreviewTableTool implements JdbcTool {
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
 
-                ResultSetMetaData rsMetaData = rs.getMetaData();
-                int columnCount = rsMetaData.getColumnCount();
+                // Extract column metadata
+                List<ColumnMetadata> columns = JdbcToolUtils.extractColumnMetadata(rs);
 
-                // Add column metadata
-                List<ColumnMetadata> columns = new ArrayList<>();
-                for (int i = 1; i <= columnCount; i++) {
-                    columns.add(new ColumnMetadata(
-                        rsMetaData.getColumnName(i),
-                        rsMetaData.getColumnTypeName(i)
-                    ));
-                }
-
-                // Add rows
-                List<Map<String, Object>> rows = new ArrayList<>();
-                while (rs.next()) {
-                    Map<String, Object> row = new HashMap<>();
-                    for (int i = 1; i <= columnCount; i++) {
-                        String columnName = rsMetaData.getColumnName(i);
-                        Object value = rs.getObject(i);
-                        row.put(columnName, value);
-                    }
-                    rows.add(row);
-                }
+                // Extract rows
+                List<Map<String, Object>> rows = JdbcToolUtils.extractRows(rs, limit);
 
                 return new TablePreviewResult(tableName, schemaName, columns, rows, rows.size(), limit);
             }

@@ -53,12 +53,11 @@ public class DescribeTableTool implements JdbcTool {
         String schemaName = params.has("schema") ? params.get("schema").asString() : null;
 
         try (Connection conn = context.getConnection()) {
+            // Resolve schema name (use provided or default)
+            schemaName = JdbcToolUtils.resolveSchemaName(conn, schemaName);
+
             DatabaseMetaData metaData = conn.getMetaData();
 
-            // If schema is not specified, try to use the default schema
-            if (schemaName == null) {
-                schemaName = conn.getSchema();
-            }
 
             // Get columns
             List<ColumnMetadata> columns = new ArrayList<>();

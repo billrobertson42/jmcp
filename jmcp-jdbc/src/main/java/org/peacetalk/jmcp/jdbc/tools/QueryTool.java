@@ -13,7 +13,6 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -83,35 +82,16 @@ public class QueryTool implements JdbcTool {
     }
 
     private QueryResult resultSetToJson(ResultSet rs) throws SQLException {
-        ResultSetMetaData metaData = rs.getMetaData();
-        int columnCount = metaData.getColumnCount();
+        // Extract column metadata using utility
+        List<ColumnMetadata> columns = JdbcToolUtils.extractColumnMetadata(rs);
 
-        // Build column metadata
-        List<ColumnMetadata> columns = new ArrayList<>();
-        for (int i = 1; i <= columnCount; i++) {
-            columns.add(new ColumnMetadata(
-                metaData.getColumnName(i),
-                metaData.getColumnTypeName(i)
-            ));
-        }
+        // Extract rows using utility
+        List<Map<String, Object>> rows = JdbcToolUtils.extractRows(rs, MAX_ROWS);
 
-        // Build rows
-        List<Map<String, Object>> rows = new ArrayList<>();
-        int rowCount = 0;
-        while (rs.next() && rowCount < MAX_ROWS) {
-            Map<String, Object> row = new HashMap<>();
-            for (int i = 1; i <= columnCount; i++) {
-                String columnName = metaData.getColumnName(i);
-                Object value = rs.getObject(i);
-                row.put(columnName, value);
-            }
-            rows.add(row);
-            rowCount++;
-        }
-
+        // Check if there are more rows
         boolean hasMore = rs.next();
 
-        return new QueryResult(columns, rows, rowCount, hasMore);
+        return new QueryResult(columns, rows, rows.size(), hasMore);
     }
 }
 

@@ -9,7 +9,6 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -52,27 +51,14 @@ public class GetRowCountTool implements JdbcTool {
         String schemaName = params.has("schema") ? params.get("schema").asString() : null;
 
         try (Connection conn = context.getConnection()) {
-            // If schema is not specified, try to use the default schema
-            if (schemaName == null) {
-                schemaName = conn.getSchema();
-            }
+            // Resolve schema name (use provided or default)
+            schemaName = JdbcToolUtils.resolveSchemaName(conn, schemaName);
 
-            // Validate that the table exists using DatabaseMetaData to prevent SQL injection
-            DatabaseMetaData metaData = conn.getMetaData();
-            boolean tableExists = false;
+            // Validate table exists to prevent SQL injection
+            JdbcToolUtils.validateTableExists(conn, schemaName, tableName);
 
-            try (ResultSet rs = metaData.getTables(null, schemaName, tableName, new String[]{"TABLE", "VIEW"})) {
-                tableExists = rs.next();
-            }
-
-            if (!tableExists) {
-                throw new SQLException("Table '" + tableName + "' does not exist" +
-                    (schemaName != null ? " in schema '" + schemaName + "'" : ""));
-            }
-
-            // Now safe to construct SQL with validated table name
-            String fullTableName = schemaName != null ?
-                schemaName + "." + tableName : tableName;
+            // Build qualified table name
+            String fullTableName = JdbcToolUtils.buildQualifiedTableName(schemaName, tableName);
 
             String sql = "SELECT COUNT(*) FROM " + fullTableName;
 
