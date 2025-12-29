@@ -3,7 +3,7 @@ package org.peacetalk.jmcp.jdbc.driver;
 /**
  * Maven coordinates for a JDBC driver
  */
-public record DriverCoordinates(
+public record MavenCoordinates(
     String groupId,
     String artifactId,
     String version

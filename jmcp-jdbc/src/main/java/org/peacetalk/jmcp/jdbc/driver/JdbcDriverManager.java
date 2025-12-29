@@ -16,15 +16,18 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class JdbcDriverManager {
 
-    private static final Map<String, DriverCoordinates> KNOWN_DRIVERS = Map.ofEntries(
-        Map.entry("postgresql", new DriverCoordinates("org.postgresql", "postgresql", "42.7.1")),
-        Map.entry("mysql", new DriverCoordinates("com.mysql", "mysql-connector-j", "8.3.0")),
-        Map.entry("mariadb", new DriverCoordinates("org.mariadb.jdbc", "mariadb-java-client", "3.3.2")),
-        Map.entry("oracle", new DriverCoordinates("com.oracle.database.jdbc", "ojdbc11", "23.3.0.23.09")),
-        Map.entry("sqlserver", new DriverCoordinates("com.microsoft.sqlserver", "mssql-jdbc", "12.6.0.jre11")),
-        Map.entry("h2", new DriverCoordinates("com.h2database", "h2", "2.2.224")),
-        Map.entry("derby", new DriverCoordinates("org.apache.derby", "derby", "10.17.1.0")),
-        Map.entry("sqlite", new DriverCoordinates("org.xerial", "sqlite-jdbc", "3.45.0.0"))
+    // HikariCP version to use with all drivers (6.x for Java 11+, 7.x requires Java 21+)
+    private static final MavenCoordinates HIKARI_CP =
+        new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2");
+
+    private static final Map<String, MavenCoordinates> KNOWN_DRIVERS = Map.ofEntries(
+        Map.entry("postgresql", new MavenCoordinates("org.postgresql", "postgresql", "42.7.8")),
+        Map.entry("mysql", new MavenCoordinates("com.mysql", "mysql-connector-j", "9.5.0")),
+        Map.entry("mariadb", new MavenCoordinates("org.mariadb.jdbc", "mariadb-java-client", "3.5.7")),
+        Map.entry("oracle", new MavenCoordinates("com.oracle.database.jdbc", "ojdbc11", "23.7.0.25.01")),
+        Map.entry("sqlserver", new MavenCoordinates("com.microsoft.sqlserver", "mssql-jdbc", "13.2.1.jre11")),
+        Map.entry("h2", new MavenCoordinates("com.h2database", "h2", "2.4.240")),
+        Map.entry("sqlite", new MavenCoordinates("org.xerial", "sqlite-jdbc", "3.51.1.0"))
     );
 
     private final Path driverCacheDir;
@@ -39,7 +42,7 @@ public class JdbcDriverManager {
     /**
      * Get known driver coordinates by database type
      */
-    public DriverCoordinates getKnownDriver(String databaseType) {
+    public MavenCoordinates getKnownDriver(String databaseType) {
         return KNOWN_DRIVERS.get(databaseType.toLowerCase());
     }
 
@@ -47,7 +50,7 @@ public class JdbcDriverManager {
      * Load a driver by database type (postgresql, mysql, etc.)
      */
     public DriverClassLoader loadDriver(String databaseType) throws Exception {
-        DriverCoordinates coordinates = getKnownDriver(databaseType);
+        MavenCoordinates coordinates = getKnownDriver(databaseType);
         if (coordinates == null) {
             throw new IllegalArgumentException("Unknown database type: " + databaseType);
         }
@@ -57,13 +60,14 @@ public class JdbcDriverManager {
     /**
      * Load a driver by Maven coordinates
      */
-    public DriverClassLoader loadDriver(DriverCoordinates coordinates) throws Exception {
+    public DriverClassLoader loadDriver(MavenCoordinates coordinates) throws Exception {
         String key = coordinates.toString();
 
         return loadedDrivers.computeIfAbsent(key, k -> {
             try {
-                Path jarPath = downloadDriver(coordinates);
-                return new DriverClassLoader(jarPath);
+                Path driverJarPath = downloadDriver(coordinates);
+                Path hikariJarPath = downloadDriver(HIKARI_CP);
+                return new DriverClassLoader(driverJarPath, hikariJarPath);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to load driver: " + coordinates, e);
             }
@@ -73,7 +77,7 @@ public class JdbcDriverManager {
     /**
      * Download driver JAR from Maven Central if not cached
      */
-    private Path downloadDriver(DriverCoordinates coordinates) throws IOException {
+    private Path downloadDriver(MavenCoordinates coordinates) throws IOException {
         String fileName = coordinates.artifactId() + "-" + coordinates.version() + ".jar";
         Path targetPath = driverCacheDir.resolve(fileName);
 
@@ -96,7 +100,7 @@ public class JdbcDriverManager {
      * Unload a driver and close its classloader
      */
     public void unloadDriver(String databaseType) throws Exception {
-        DriverCoordinates coordinates = getKnownDriver(databaseType);
+        MavenCoordinates coordinates = getKnownDriver(databaseType);
         if (coordinates != null) {
             unloadDriver(coordinates);
         }
@@ -105,7 +109,7 @@ public class JdbcDriverManager {
     /**
      * Unload a driver by coordinates
      */
-    public void unloadDriver(DriverCoordinates coordinates) throws Exception {
+    public void unloadDriver(MavenCoordinates coordinates) throws Exception {
         String key = coordinates.toString();
         DriverClassLoader classLoader = loadedDrivers.remove(key);
         if (classLoader != null) {
@@ -114,11 +118,15 @@ public class JdbcDriverManager {
     }
 
     /**
-     * Isolated ClassLoader for JDBC driver
+     * Isolated ClassLoader for JDBC driver and HikariCP
+     * This ensures the driver and connection pool are completely isolated
      */
     public static class DriverClassLoader extends URLClassLoader {
-        public DriverClassLoader(Path jarPath) throws Exception {
-            super(new URL[]{jarPath.toUri().toURL()}, ClassLoader.getPlatformClassLoader());
+        public DriverClassLoader(Path driverJarPath, Path hikariJarPath) throws Exception {
+            super(new URL[]{
+                driverJarPath.toUri().toURL(),
+                hikariJarPath.toUri().toURL()
+            }, ClassLoader.getPlatformClassLoader());
         }
 
         /**

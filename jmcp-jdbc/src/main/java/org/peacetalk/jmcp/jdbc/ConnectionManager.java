@@ -1,10 +1,9 @@
 package org.peacetalk.jmcp.jdbc;
 
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
+import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.util.List;
@@ -133,21 +132,20 @@ public class ConnectionManager implements ConnectionContextResolver {
             case "oracle" -> "oracle.jdbc.OracleDriver";
             case "sqlserver" -> "com.microsoft.sqlserver.jdbc.SQLServerDriver";
             case "h2" -> "org.h2.Driver";
-            case "derby" -> "org.apache.derby.jdbc.EmbeddedDriver";
             case "sqlite" -> "org.sqlite.JDBC";
             default -> throw new IllegalArgumentException("Unknown database type: " + databaseType);
         };
     }
 
     /**
-     * Connection pool with isolated classloader
+     * Connection pool with isolated classloader for driver and HikariCP
      */
     private static class ConnectionPool implements ConnectionContext {
         private final String connectionId;
         private final String databaseType;
         private final String jdbcUrl;
         private final String username;
-        private final HikariDataSource dataSource;
+        private final DataSource dataSource;
         private final JdbcDriverManager.DriverClassLoader classLoader;
 
         public ConnectionPool(String connectionId, String databaseType, String jdbcUrl, String username,
@@ -158,35 +156,37 @@ public class ConnectionManager implements ConnectionContextResolver {
             this.username = username;
             this.classLoader = classLoader;
 
-            HikariConfig config = new HikariConfig();
-            config.setJdbcUrl(jdbcUrl);
-            config.setUsername(username);
-            config.setPassword(password);
-            config.setMaximumPoolSize(5);
-            config.setReadOnly(true); // Read-only for safety
-            config.setDriverClassName(driver.getClass().getName());
-
-            // Use the isolated classloader
-            Thread currentThread = Thread.currentThread();
-            ClassLoader oldClassLoader = currentThread.getContextClassLoader();
             try {
-                currentThread.setContextClassLoader(classLoader);
-                this.dataSource = new HikariDataSource(config);
-            } finally {
-                currentThread.setContextClassLoader(oldClassLoader);
+                // Load HikariCP classes through the driver classloader
+                Class<?> hikariConfigClass = classLoader.loadClass("com.zaxxer.hikari.HikariConfig");
+                Class<?> hikariDataSourceClass = classLoader.loadClass("com.zaxxer.hikari.HikariDataSource");
+
+                // Create HikariConfig instance
+                Object config = hikariConfigClass.getDeclaredConstructor().newInstance();
+
+                // Set properties using reflection
+                hikariConfigClass.getMethod("setJdbcUrl", String.class).invoke(config, jdbcUrl);
+                hikariConfigClass.getMethod("setUsername", String.class).invoke(config, username);
+                hikariConfigClass.getMethod("setPassword", String.class).invoke(config, password);
+                hikariConfigClass.getMethod("setMaximumPoolSize", int.class).invoke(config, 5);
+                hikariConfigClass.getMethod("setMinimumIdle", int.class).invoke(config, 0);
+                hikariConfigClass.getMethod("setReadOnly", boolean.class).invoke(config, true);
+                hikariConfigClass.getMethod("setDriverClassName", String.class).invoke(config, driver.getClass().getName());
+
+                // Create HikariDataSource with the config
+                this.dataSource = (DataSource) hikariDataSourceClass
+                    .getDeclaredConstructor(hikariConfigClass)
+                    .newInstance(config);
+
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to create connection pool for " + connectionId, e);
             }
         }
 
         @Override
         public Connection getConnection() throws Exception {
-            Thread currentThread = Thread.currentThread();
-            ClassLoader oldClassLoader = currentThread.getContextClassLoader();
-            try {
-                currentThread.setContextClassLoader(classLoader);
-                return dataSource.getConnection();
-            } finally {
-                currentThread.setContextClassLoader(oldClassLoader);
-            }
+            // DataSource.getConnection() works across classloaders since it's a standard interface
+            return dataSource.getConnection();
         }
 
         public String getConnectionId() {
@@ -206,8 +206,14 @@ public class ConnectionManager implements ConnectionContextResolver {
         }
 
         public void close() {
-            if (dataSource != null && !dataSource.isClosed()) {
-                dataSource.close();
+            // Close the DataSource using reflection (HikariDataSource implements AutoCloseable)
+            try {
+                if (dataSource instanceof AutoCloseable) {
+                    ((AutoCloseable) dataSource).close();
+                }
+            } catch (Exception e) {
+                System.err.println("Error closing connection pool: " + e.getMessage());
+                e.printStackTrace(System.err);
             }
         }
     }

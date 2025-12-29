@@ -3,7 +3,7 @@ package test.org.peacetalk.jmcp.jdbc.driver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.peacetalk.jmcp.jdbc.driver.DriverCoordinates;
+import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
 
 import java.nio.file.Path;
@@ -24,38 +24,38 @@ class JdbcDriverManagerTest {
 
     @Test
     void testGetKnownDriver() {
-        DriverCoordinates postgresql = driverManager.getKnownDriver("postgresql");
+        MavenCoordinates postgresql = driverManager.getKnownDriver("postgresql");
         assertNotNull(postgresql);
         assertEquals("org.postgresql", postgresql.groupId());
         assertEquals("postgresql", postgresql.artifactId());
 
-        DriverCoordinates mysql = driverManager.getKnownDriver("mysql");
+        MavenCoordinates mysql = driverManager.getKnownDriver("mysql");
         assertNotNull(mysql);
         assertEquals("com.mysql", mysql.groupId());
 
-        DriverCoordinates mariadb = driverManager.getKnownDriver("mariadb");
+        MavenCoordinates mariadb = driverManager.getKnownDriver("mariadb");
         assertNotNull(mariadb);
 
-        DriverCoordinates h2 = driverManager.getKnownDriver("h2");
+        MavenCoordinates h2 = driverManager.getKnownDriver("h2");
         assertNotNull(h2);
 
-        DriverCoordinates sqlite = driverManager.getKnownDriver("sqlite");
+        MavenCoordinates sqlite = driverManager.getKnownDriver("sqlite");
         assertNotNull(sqlite);
     }
 
     @Test
     void testGetKnownDriverCaseInsensitive() {
-        DriverCoordinates postgresql = driverManager.getKnownDriver("PostgreSQL");
+        MavenCoordinates postgresql = driverManager.getKnownDriver("PostgreSQL");
         assertNotNull(postgresql);
         assertEquals("org.postgresql", postgresql.groupId());
 
-        DriverCoordinates mysql = driverManager.getKnownDriver("MYSQL");
+        MavenCoordinates mysql = driverManager.getKnownDriver("MYSQL");
         assertNotNull(mysql);
     }
 
     @Test
     void testGetUnknownDriver() {
-        DriverCoordinates unknown = driverManager.getKnownDriver("unknowndb");
+        MavenCoordinates unknown = driverManager.getKnownDriver("unknowndb");
         assertNull(unknown);
     }
 

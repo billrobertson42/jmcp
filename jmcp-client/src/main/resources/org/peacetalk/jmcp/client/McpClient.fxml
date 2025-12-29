@@ -71,7 +71,10 @@
 
             <!-- Right: Output Panel -->
             <VBox spacing="5" style="-fx-padding: 10;" VBox.vgrow="ALWAYS">
-                <Label text="Output" styleClass="section-header"/>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Output" styleClass="section-header"/>
+                    <CheckBox fx:id="decodeJsonCheckBox" text="Decode JSON in text fields" selected="true"/>
+                </HBox>
                 <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
                     <Tab text="Result">
                         <TextArea fx:id="resultArea" editable="false" wrapText="true">

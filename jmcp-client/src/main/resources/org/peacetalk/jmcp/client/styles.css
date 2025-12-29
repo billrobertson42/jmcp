@@ -71,9 +71,14 @@
 }
 
 .text-area .content {
-    -fx-background-color: white;
+    -fx-background-color: white !important;
     -fx-padding: 8px;
-    -fx-text-fill: #000000; /* Pure black for maximum contrast */
+    -fx-text-fill: #000000 !important; /* Pure black for maximum contrast */
+}
+
+.text-area .text {
+    -fx-fill: #000000 !important; /* Ensure text is black */
+    -fx-font-smoothing-type: gray;
 }
 
 .text-area .scroll-pane {
@@ -101,22 +106,53 @@
 
 #resultArea {
     -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
-    -fx-font-size: 14px; /* Increased from 13px */
+    -fx-font-size: 15px; /* Increased from 14px */
+    -fx-font-weight: bold; /* Make text bolder for better readability */
 }
 
 #resultArea .content {
-    -fx-text-fill: #000000; /* Pure black for results - maximum readability */
-    -fx-background-color: #ffffff; /* Pure white background */
+    -fx-text-fill: #000000 !important; /* Pure black - maximum readability */
+    -fx-background-color: #ffffff !important; /* Pure white background */
+    -fx-padding: 10px;
+}
+
+#resultArea .text {
+    -fx-fill: #000000 !important; /* Ensure text fill is also black */
+    -fx-font-smoothing-type: gray; /* Better text rendering */
 }
 
 #communicationLogArea {
     -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
-    -fx-font-size: 13px;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold; /* Make text bolder */
 }
 
 #communicationLogArea .content {
-    -fx-text-fill: #000000; /* Pure black for log - maximum readability */
-    -fx-background-color: #ffffff; /* Pure white background */
+    -fx-text-fill: #000000 !important; /* Pure black - maximum readability */
+    -fx-background-color: #ffffff !important; /* Pure white background */
+    -fx-padding: 10px;
+}
+
+#communicationLogArea .text {
+    -fx-fill: #000000 !important; /* Ensure text fill is also black */
+    -fx-font-smoothing-type: gray;
+}
+
+#serverStderrArea {
+    -fx-font-family: "Monospace", "Consolas", "Courier New", monospace;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+#serverStderrArea .content {
+    -fx-text-fill: #cc0000 !important; /* Dark red for stderr */
+    -fx-background-color: #fffafa !important; /* Very light pink background */
+    -fx-padding: 10px;
+}
+
+#serverStderrArea .text {
+    -fx-fill: #cc0000 !important;
+    -fx-font-smoothing-type: gray;
 }
 
 /* ===== BUTTONS ===== */

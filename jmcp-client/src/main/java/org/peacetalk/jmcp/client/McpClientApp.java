@@ -21,7 +21,7 @@ public class McpClientApp extends Application {
 
         // Optional: Apply larger font scale for better readability
         // Uncomment one of these lines to enable:
-        // AccessibilityHelper.applyLargeTextPreset(scene);      // 25% larger fonts
+         AccessibilityHelper.applyLargeTextPreset(scene);      // 25% larger fonts
         // AccessibilityHelper.applyExtraLargeTextPreset(scene); // 50% larger fonts + high contrast
         // AccessibilityHelper.setFontScale(scene, 1.3);         // Custom scale factor
 

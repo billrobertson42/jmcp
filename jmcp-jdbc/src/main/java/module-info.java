@@ -2,7 +2,6 @@ module org.peacetalk.jmcp.jdbc {
     requires org.peacetalk.jmcp.core;
     requires java.sql;
     requires tools.jackson.databind;
-    requires com.zaxxer.hikari;
     requires jdbctl;
     requires net.sf.jsqlparser;
 
@@ -15,5 +14,8 @@ module org.peacetalk.jmcp.jdbc {
     exports org.peacetalk.jmcp.jdbc.tools to org.peacetalk.jmcp.jdbc.test;
     exports org.peacetalk.jmcp.jdbc.tools.results to org.peacetalk.jmcp.jdbc.test;
     exports org.peacetalk.jmcp.jdbc.validation to org.peacetalk.jmcp.jdbc.test;
+
+    opens org.peacetalk.jmcp.jdbc.config;
+    opens org.peacetalk.jmcp.jdbc.tools.results;
 }
 

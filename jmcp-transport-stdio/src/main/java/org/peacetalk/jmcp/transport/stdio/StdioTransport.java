@@ -35,7 +35,7 @@ public class StdioTransport implements McpTransport {
                     if (line.trim().isEmpty()) {
                         continue;
                     }
-                    
+
                     String response = handler.handleRequest(line);
                     writer.println(response);
                     writer.flush();

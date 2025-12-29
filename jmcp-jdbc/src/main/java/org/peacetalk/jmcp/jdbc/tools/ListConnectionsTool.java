@@ -1,9 +1,8 @@
 package org.peacetalk.jmcp.jdbc.tools;
 
+import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
-import org.peacetalk.jmcp.jdbc.JdbcTool;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 import org.peacetalk.jmcp.jdbc.tools.results.ListConnectionsResult;
 import tools.jackson.databind.JsonNode;
@@ -15,7 +14,7 @@ import java.util.Map;
 /**
  * Tool for listing available database connections
  */
-public class ListConnectionsTool implements JdbcTool {
+public class ListConnectionsTool implements Tool {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final ConnectionManager connectionManager;
 
@@ -25,7 +24,7 @@ public class ListConnectionsTool implements JdbcTool {
 
     @Override
     public String getName() {
-        return "list_connections";
+        return "list-connections";
     }
 
     @Override
@@ -41,7 +40,7 @@ public class ListConnectionsTool implements JdbcTool {
     }
 
     @Override
-    public Object execute(JsonNode params, ConnectionContext context) throws Exception {
+    public Object execute(JsonNode params) throws Exception {
         List<ConnectionInfo> connections = connectionManager.listConnections();
         String defaultId = connectionManager.getDefaultConnectionId();
 

@@ -11,6 +11,7 @@ import org.peacetalk.jmcp.client.ui.ToolArgumentFormBuilder;
 import org.peacetalk.jmcp.client.ui.ToolListCell;
 import org.peacetalk.jmcp.client.ui.ValueParser;
 import org.peacetalk.jmcp.core.model.CallToolResult;
+import org.peacetalk.jmcp.core.model.Content;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import org.peacetalk.jmcp.core.model.Tool;
@@ -39,6 +40,7 @@ public class McpClientController {
     @FXML private TextArea communicationLogArea;
     @FXML private TextArea serverStderrArea;
     @FXML private Label workingDirectoryLabel;
+    @FXML private CheckBox decodeJsonCheckBox;
 
     // Services and Helpers
     private final McpService mcpService = new McpService();
@@ -295,9 +297,14 @@ public class McpClientController {
             try {
                 CallToolResult result = mcpService.executeTool(selectedTool.name(), arguments);
 
+                // Apply JSON decoding transformation if enabled
+                Object displayResult = decodeJsonCheckBox.isSelected()
+                    ? decodeJsonInResult(result)
+                    : result;
+
                 // Pretty print result
                 String prettyResult = MAPPER.writerWithDefaultPrettyPrinter()
-                        .writeValueAsString(result);
+                        .writeValueAsString(displayResult);
 
                 Platform.runLater(() -> {
                     resultArea.setText(prettyResult);
@@ -331,6 +338,54 @@ public class McpClientController {
         alert.setHeaderText(null);
         alert.setContentText(message);
         alert.showAndWait();
+    }
+
+    /**
+     * Decode JSON strings in text fields of CallToolResult for display purposes.
+     * This transforms "text": "{\"foo\":\"bar\"}" into a decoded_text field with the parsed JSON.
+     * The transformation only affects display - the original result is unchanged.
+     */
+    private Object decodeJsonInResult(CallToolResult result) {
+        if (result == null || result.content() == null) {
+            return result;
+        }
+
+        List<Object> transformedContent = result.content().stream()
+            .map(this::decodeJsonInContent)
+            .toList();
+
+        // Return a display wrapper instead of a real CallToolResult
+        return new DisplayResult(transformedContent, result.isError());
+    }
+
+    /**
+     * Transform a Content object by decoding JSON in text fields.
+     * If the text field contains valid JSON, creates a display-friendly version
+     * with the decoded JSON as an object.
+     */
+    private Object decodeJsonInContent(Content content) {
+        if (content == null || !"text".equals(content.type()) || content.text() == null) {
+            return content;
+        }
+
+        String text = content.text().trim();
+
+        // Check if text looks like JSON (starts with { or [)
+        if (!text.startsWith("{") && !text.startsWith("[")) {
+            return content;
+        }
+
+        try {
+            // Try to parse as JSON
+            Object decoded = MAPPER.readValue(text, Object.class);
+
+            // Return a wrapper that will serialize with the decoded object
+            return new DisplayContent("text", decoded);
+
+        } catch (Exception e) {
+            // Not valid JSON or parsing failed - return original content
+            return content;
+        }
     }
 
 

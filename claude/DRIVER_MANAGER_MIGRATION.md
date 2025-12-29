@@ -11,11 +11,11 @@ Successfully migrated the `jmcp-driver-manager` module into the `jmcp-jdbc` modu
 ### 1. File Moves
 
 **Source Code:**
-- Moved `org.peacetalk.jmcp.driver.DriverCoordinates` → `org.peacetalk.jmcp.jdbc.driver.DriverCoordinates`
+- Moved `org.peacetalk.jmcp.driver.DriverCoordinates` → `org.peacetalk.jmcp.jdbc.driver.MavenCoordinates`
 - Moved `org.peacetalk.jmcp.driver.JdbcDriverManager` → `org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager`
 
 **Test Code:**
-- Moved `test.org.peacetalk.jmcp.driver.DriverCoordinatesTest` → `test.org.peacetalk.jmcp.jdbc.driver.DriverCoordinatesTest`
+- Moved `test.org.peacetalk.jmcp.driver.DriverCoordinatesTest` → `test.org.peacetalk.jmcp.jdbc.driver.MavenCoordinatesTest`
 - Moved `test.org.peacetalk.jmcp.driver.JdbcDriverManagerTest` → `test.org.peacetalk.jmcp.jdbc.driver.JdbcDriverManagerTest`
 
 ### 2. Package Declaration Updates

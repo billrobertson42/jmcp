@@ -1,16 +1,16 @@
 package test.org.peacetalk.jmcp.jdbc.driver;
 
 import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.jdbc.driver.DriverCoordinates;
+import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
-class DriverCoordinatesTest {
+class MavenCoordinatesTest {
 
     @Test
     void testCoordinatesCreation() {
-        DriverCoordinates coords = new DriverCoordinates(
+        MavenCoordinates coords = new MavenCoordinates(
             "org.postgresql",
             "postgresql",
             "42.7.1"
@@ -23,7 +23,7 @@ class DriverCoordinatesTest {
 
     @Test
     void testToPath() {
-        DriverCoordinates coords = new DriverCoordinates(
+        MavenCoordinates coords = new MavenCoordinates(
             "org.postgresql",
             "postgresql",
             "42.7.1"
@@ -35,7 +35,7 @@ class DriverCoordinatesTest {
 
     @Test
     void testGetMavenCentralUrl() {
-        DriverCoordinates coords = new DriverCoordinates(
+        MavenCoordinates coords = new MavenCoordinates(
             "org.postgresql",
             "postgresql",
             "42.7.1"
@@ -47,7 +47,7 @@ class DriverCoordinatesTest {
 
     @Test
     void testToString() {
-        DriverCoordinates coords = new DriverCoordinates(
+        MavenCoordinates coords = new MavenCoordinates(
             "com.mysql",
             "mysql-connector-j",
             "8.3.0"
@@ -58,7 +58,7 @@ class DriverCoordinatesTest {
 
     @Test
     void testWithComplexGroupId() {
-        DriverCoordinates coords = new DriverCoordinates(
+        MavenCoordinates coords = new MavenCoordinates(
             "com.oracle.database.jdbc",
             "ojdbc11",
             "23.3.0.23.09"
