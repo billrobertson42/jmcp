@@ -29,7 +29,7 @@ public class ListConnectionsTool implements Tool {
 
     @Override
     public String getDescription() {
-        return "List all available database connections with their IDs, URLs, usernames, and database types. Shows which connection is the default.";
+        return "Lists configured database connections, including ID, type, and sanitized URL.";
     }
 
     @Override

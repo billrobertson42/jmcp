@@ -9,7 +9,13 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 public record IndexInfo(
     String name,
     String column,
-    boolean unique
+    boolean unique,
+    String type,  // UNIQUE_CONSTRAINT, INDEX, PRIMARY_KEY
+    Boolean isDeferrable
 ) {
+    // Backward-compatible constructor
+    public IndexInfo(String name, String column, boolean unique) {
+        this(name, column, unique, unique ? "UNIQUE_INDEX" : "INDEX", null);
+    }
 }
 

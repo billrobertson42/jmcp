@@ -29,7 +29,7 @@ public class ListTablesTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "List all tables in the database or a specific schema";
+        return "Lists all tables in a given schema. If no schema is specified, lists tables in the connection's default schema. Use this to discover available tables.";
     }
 
     @Override
@@ -46,10 +46,17 @@ public class ListTablesTool implements JdbcTool {
 
     @Override
     public Object execute(JsonNode params, ConnectionContext context) throws Exception {
-        String schemaPattern = params.has("schema") ? params.get("schema").asString() : null;
-
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
+
+            // Get schema pattern: use provided schema, or default to connection's current schema
+            String schemaPattern;
+            if (params.has("schema")) {
+                schemaPattern = params.get("schema").asString();
+            } else {
+                // Get the default schema for this connection
+                schemaPattern = conn.getSchema();
+            }
 
             List<TableInfo> tables = new ArrayList<>();
 

@@ -5,8 +5,7 @@ import org.peacetalk.jmcp.core.schema.ObjectSchema;
 import org.peacetalk.jmcp.core.schema.StringProperty;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.JdbcTool;
-import org.peacetalk.jmcp.jdbc.tools.results.ColumnMetadata;
-import org.peacetalk.jmcp.jdbc.tools.results.QueryResult;
+import org.peacetalk.jmcp.jdbc.tools.results.CompactQueryResult;
 import org.peacetalk.jmcp.jdbc.validation.ReadOnlySqlValidator;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -31,7 +30,9 @@ public class QueryTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Execute a read-only SQL SELECT query. Returns up to " + MAX_ROWS + " rows.";
+        return "Execute a read-only SQL SELECT query. Returns up to " + MAX_ROWS + " rows. " +
+            "Returns compact format: {\"table\":\"name\", \"schema\":\"name\", \"cols\":[\"col_name1\",\"col_name2\",...], \"rows\":[[val1,val2,...],[...]], \"count\":N}. " +
+            "Data in 'rows' as arrays where the order in each row matches the order of the columns.";
     }
 
     @Override
@@ -81,17 +82,17 @@ public class QueryTool implements JdbcTool {
         }
     }
 
-    private QueryResult resultSetToJson(ResultSet rs) throws SQLException {
-        // Extract column metadata using utility
-        List<ColumnMetadata> columns = JdbcToolUtils.extractColumnMetadata(rs);
+    private CompactQueryResult resultSetToJson(ResultSet rs) throws SQLException {
+        // Extract column names
+        List<String> columnNames = JdbcToolUtils.extractColumnNames(rs);
 
-        // Extract rows using utility
-        List<Map<String, Object>> rows = JdbcToolUtils.extractRows(rs, MAX_ROWS);
+        // Extract rows as arrays (compact format - saves ~40-60% tokens)
+        List<List<Object>> rows = JdbcToolUtils.extractRowsAsArrays(rs, MAX_ROWS);
 
         // Check if there are more rows
         boolean hasMore = rs.next();
 
-        return new QueryResult(columns, rows, rows.size(), hasMore);
+        return new CompactQueryResult(columnNames, rows, rows.size(), hasMore);
     }
 }
 

@@ -74,7 +74,6 @@ public class JdbcToolProvider implements ToolProvider {
         tools.add(new JdbcToolAdapter(new ListSchemasTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new DescribeTableTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new GetRowCountTool(), connectionManager));
-        tools.add(new JdbcToolAdapter(new PreviewTableTool(), connectionManager));
     }
 
     @Override

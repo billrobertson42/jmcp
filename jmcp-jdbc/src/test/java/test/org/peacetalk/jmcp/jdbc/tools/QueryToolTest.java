@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.tools.QueryTool;
-import org.peacetalk.jmcp.jdbc.tools.results.QueryResult;
+import org.peacetalk.jmcp.jdbc.tools.results.CompactQueryResult;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
@@ -75,12 +75,12 @@ class QueryToolTest {
 
         Object result = queryTool.execute(params, context);
         assertNotNull(result);
-        assertTrue(result instanceof QueryResult);
+        assertTrue(result instanceof CompactQueryResult);
 
-        QueryResult queryResult = (QueryResult) result;
+        CompactQueryResult queryResult = (CompactQueryResult) result;
         assertNotNull(queryResult.columns());
         assertNotNull(queryResult.rows());
-        assertEquals(3, queryResult.rowCount());
+        assertEquals(3, queryResult.count());
     }
 
     @Test
@@ -91,10 +91,10 @@ class QueryToolTest {
         params.put("sql", "SELECT * FROM users WHERE age > 28");
 
         Object result = queryTool.execute(params, context);
-        assertTrue(result instanceof QueryResult);
+        assertTrue(result instanceof CompactQueryResult);
 
-        QueryResult queryResult = (QueryResult) result;
-        assertEquals(2, queryResult.rowCount());
+        CompactQueryResult queryResult = (CompactQueryResult) result;
+        assertEquals(2, queryResult.count());
     }
 
     @Test

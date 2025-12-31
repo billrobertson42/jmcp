@@ -131,5 +131,62 @@ public final class JdbcToolUtils {
     public static List<Map<String, Object>> extractRows(ResultSet rs) throws SQLException {
         return extractRows(rs, 0);
     }
+
+    /**
+     * Extract rows from a ResultSet as a list of arrays (compact format).
+     * This is more token-efficient than map format as column names aren't repeated.
+     *
+     * @param rs The ResultSet to extract rows from
+     * @param maxRows Maximum number of rows to extract (0 or negative for no limit)
+     * @return List of row arrays where each array contains column values in order
+     * @throws SQLException if there's an error reading the ResultSet
+     */
+    public static List<List<Object>> extractRowsAsArrays(ResultSet rs, int maxRows) throws SQLException {
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        List<List<Object>> rows = new ArrayList<>();
+        int rowCount = 0;
+
+        while (rs.next() && (maxRows <= 0 || rowCount < maxRows)) {
+            List<Object> row = new ArrayList<>(columnCount);
+            for (int i = 1; i <= columnCount; i++) {
+                row.add(rs.getObject(i));
+            }
+            rows.add(row);
+            rowCount++;
+        }
+
+        return rows;
+    }
+
+    /**
+     * Extract all rows from a ResultSet as arrays (no row limit).
+     *
+     * @param rs The ResultSet to extract rows from
+     * @return List of row arrays
+     * @throws SQLException if there's an error reading the ResultSet
+     */
+    public static List<List<Object>> extractRowsAsArrays(ResultSet rs) throws SQLException {
+        return extractRowsAsArrays(rs, 0);
+    }
+
+    /**
+     * Extract column names from a ResultSet.
+     *
+     * @param rs The ResultSet to extract column names from
+     * @return List of column names in order
+     * @throws SQLException if there's an error accessing the metadata
+     */
+    public static List<String> extractColumnNames(ResultSet rs) throws SQLException {
+        ResultSetMetaData metaData = rs.getMetaData();
+        int columnCount = metaData.getColumnCount();
+
+        List<String> names = new ArrayList<>(columnCount);
+        for (int i = 1; i <= columnCount; i++) {
+            names.add(metaData.getColumnName(i));
+        }
+        return names;
+    }
 }
 

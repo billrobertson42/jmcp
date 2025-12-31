@@ -29,7 +29,7 @@ public class ListSchemasTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "List all schemas/catalogs in the database";
+        return "Lists all schemas in the database.";
     }
 
     @Override

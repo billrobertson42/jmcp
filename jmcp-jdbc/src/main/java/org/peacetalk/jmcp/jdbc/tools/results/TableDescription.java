@@ -13,7 +13,13 @@ public record TableDescription(
     String schema,
     List<ColumnMetadata> columns,
     List<String> primaryKeys,
-    List<IndexInfo> indexes
+    List<ForeignKeyInfo> foreignKeys,
+    List<IndexInfo> indexes,
+    // Optional extended information
+    List<TriggerInfo> triggers,
+    List<CheckConstraintInfo> checkConstraints,
+    TableStatistics statistics,
+    PartitionInfo partitions
 ) {
 }
 
