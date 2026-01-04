@@ -244,6 +244,9 @@ class JdbcResourcesTest {
         JsonNode fk = foreignKeys.get(0);
         assertEquals("USERS", fk.get("referencedTable").asString());
         assertTrue(fk.has("referencedTableUri"));
+        // Check that referential action fields are present (may be null)
+        assertTrue(fk.has("onDelete"));
+        assertTrue(fk.has("onUpdate"));
     }
 
     @Test
@@ -264,6 +267,9 @@ class JdbcResourcesTest {
         JsonNode reverseFk = reverseFks.get(0);
         assertEquals("ORDERS", reverseFk.get("referencingTable").asString());
         assertTrue(reverseFk.has("referencingTableUri"));
+        // Check that referential action fields are present (may be null)
+        assertTrue(reverseFk.has("onDelete"));
+        assertTrue(reverseFk.has("onUpdate"));
     }
 
     // RelationshipsResource tests

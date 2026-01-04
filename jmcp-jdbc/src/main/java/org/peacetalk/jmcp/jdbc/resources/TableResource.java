@@ -124,6 +124,8 @@ public class TableResource implements Resource {
                 List<ColumnMapping> currentMappings = new ArrayList<>();
                 String currentPkTable = null;
                 String currentPkSchema = null;
+                String currentOnDelete = null;
+                String currentOnUpdate = null;
 
                 while (rs.next()) {
                     String fkName = rs.getString("FK_NAME");
@@ -131,6 +133,12 @@ public class TableResource implements Resource {
                     String pkTable = rs.getString("PKTABLE_NAME");
                     String pkSchema = rs.getString("PKTABLE_SCHEM");
                     String pkColumn = rs.getString("PKCOLUMN_NAME");
+
+                    // Get referential actions
+                    short deleteRule = rs.getShort("DELETE_RULE");
+                    short updateRule = rs.getShort("UPDATE_RULE");
+                    String onDelete = getReferentialAction(deleteRule);
+                    String onUpdate = getReferentialAction(updateRule);
 
                     if (fkName == null) continue;
 
@@ -141,13 +149,17 @@ public class TableResource implements Resource {
                                 currentPkSchema,
                                 currentPkTable,
                                 new ArrayList<>(currentMappings),
-                                tableUri(connectionId, currentPkSchema, currentPkTable)
+                                tableUri(connectionId, currentPkSchema, currentPkTable),
+                                currentOnDelete,
+                                currentOnUpdate
                             ));
                         }
                         currentFkName = fkName;
                         currentMappings.clear();
                         currentPkTable = pkTable;
                         currentPkSchema = pkSchema;
+                        currentOnDelete = onDelete;
+                        currentOnUpdate = onUpdate;
                     }
                     currentMappings.add(new ColumnMapping(fkColumn, pkColumn));
                 }
@@ -158,7 +170,9 @@ public class TableResource implements Resource {
                         currentPkSchema,
                         currentPkTable,
                         currentMappings,
-                        tableUri(connectionId, currentPkSchema, currentPkTable)
+                        tableUri(connectionId, currentPkSchema, currentPkTable),
+                        currentOnDelete,
+                        currentOnUpdate
                     ));
                 }
             }
@@ -169,6 +183,8 @@ public class TableResource implements Resource {
                 List<ColumnMapping> currentMappings = new ArrayList<>();
                 String currentFkTable = null;
                 String currentFkSchema = null;
+                String currentOnDelete = null;
+                String currentOnUpdate = null;
 
                 while (rs.next()) {
                     String fkName = rs.getString("FK_NAME");
@@ -176,6 +192,12 @@ public class TableResource implements Resource {
                     String fkTable = rs.getString("FKTABLE_NAME");
                     String fkSchema = rs.getString("FKTABLE_SCHEM");
                     String pkColumn = rs.getString("PKCOLUMN_NAME");
+
+                    // Get referential actions
+                    short deleteRule = rs.getShort("DELETE_RULE");
+                    short updateRule = rs.getShort("UPDATE_RULE");
+                    String onDelete = getReferentialAction(deleteRule);
+                    String onUpdate = getReferentialAction(updateRule);
 
                     if (fkName == null) continue;
 
@@ -186,13 +208,17 @@ public class TableResource implements Resource {
                                 currentFkSchema,
                                 currentFkTable,
                                 new ArrayList<>(currentMappings),
-                                tableUri(connectionId, currentFkSchema, currentFkTable)
+                                tableUri(connectionId, currentFkSchema, currentFkTable),
+                                currentOnDelete,
+                                currentOnUpdate
                             ));
                         }
                         currentFkName = fkName;
                         currentMappings.clear();
                         currentFkTable = fkTable;
                         currentFkSchema = fkSchema;
+                        currentOnDelete = onDelete;
+                        currentOnUpdate = onUpdate;
                     }
                     currentMappings.add(new ColumnMapping(pkColumn, fkColumn));
                 }
@@ -203,7 +229,9 @@ public class TableResource implements Resource {
                         currentFkSchema,
                         currentFkTable,
                         currentMappings,
-                        tableUri(connectionId, currentFkSchema, currentFkTable)
+                        tableUri(connectionId, currentFkSchema, currentFkTable),
+                        currentOnDelete,
+                        currentOnUpdate
                     ));
                 }
             }
@@ -227,6 +255,20 @@ public class TableResource implements Resource {
     }
 
     /**
+     * Convert JDBC referential action code to readable string
+     */
+    private static String getReferentialAction(short actionCode) {
+        return switch (actionCode) {
+            case DatabaseMetaData.importedKeyCascade -> "CASCADE";
+            case DatabaseMetaData.importedKeySetNull -> "SET NULL";
+            case DatabaseMetaData.importedKeySetDefault -> "SET DEFAULT";
+            case DatabaseMetaData.importedKeyRestrict -> "RESTRICT";
+            case DatabaseMetaData.importedKeyNoAction -> "NO ACTION";
+            default -> null;
+        };
+    }
+
+    /**
      * Response record for serialization
      */
     public record TableResponse(
@@ -242,7 +284,7 @@ public class TableResource implements Resource {
     ) {}
 
     /**
-     * Column information
+     * Column information with extended metadata
      */
     public record ColumnInfo(
         String name,
@@ -272,7 +314,9 @@ public class TableResource implements Resource {
         String referencedSchema,
         String referencedTable,
         List<ColumnMapping> columns,
-        String referencedTableUri
+        String referencedTableUri,
+        String onDelete,
+        String onUpdate
     ) {}
 
     /**
@@ -284,7 +328,9 @@ public class TableResource implements Resource {
         String referencingSchema,
         String referencingTable,
         List<ColumnMapping> columns,
-        String referencingTableUri
+        String referencingTableUri,
+        String onDelete,
+        String onUpdate
     ) {}
 
     /**

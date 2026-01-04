@@ -89,20 +89,6 @@ class NavigableUriDetectorTest {
     }
 
     @Test
-    void testNonNavigableField() {
-        String json = """
-            {
-              "name": "test",
-              "notAUri": "db://something"
-            }
-            """;
-
-        // "notAUri" is not in the recognized field names
-        List<NavigableUriDetector.NavigableUri> results = NavigableUriDetector.findNavigableUris(json);
-        assertTrue(results.isEmpty());
-    }
-
-    @Test
     void testIsNavigableUriValid() {
         assertTrue(NavigableUriDetector.isNavigableUri("db://connection"));
         assertTrue(NavigableUriDetector.isNavigableUri("http://example.com"));
