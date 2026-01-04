@@ -45,7 +45,11 @@ public class JdbcResourceProvider implements ResourceProvider {
         // Return root-level resources - the list of connections
         List<Resource> resources = new ArrayList<>();
 
-        // Add the connections list resource
+        // Add the context resource first - this is the primary resource for LLM consumption
+        // It provides a comprehensive summary of all connections, schemas, tables, and available tools
+        resources.add(new ContextResource(connectionManager));
+
+        // Add the connections list resource for HATEOAS-style navigation
         resources.add(new ConnectionsListResource(connectionManager));
 
         // Add individual connection resources
@@ -78,13 +82,14 @@ public class JdbcResourceProvider implements ResourceProvider {
     }
 
     /**
-     * Handle root-level resources: connections
+     * Handle root-level resources: connections, context
      */
     private Resource handleRootResource(String resourceType) {
-        if ("connections".equals(resourceType)) {
-            return new ConnectionsListResource(connectionManager);
-        }
-        return null;
+        return switch (resourceType) {
+            case "connections" -> new ConnectionsListResource(connectionManager);
+            case "context" -> new ContextResource(connectionManager);
+            default -> null;
+        };
     }
 
     /**
