@@ -1,7 +1,6 @@
 package org.peacetalk.jmcp.jdbc.tools;
 
 import org.peacetalk.jmcp.core.schema.BooleanProperty;
-import org.peacetalk.jmcp.core.schema.BooleanProperty;
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
 import org.peacetalk.jmcp.core.schema.StringProperty;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
@@ -14,7 +13,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

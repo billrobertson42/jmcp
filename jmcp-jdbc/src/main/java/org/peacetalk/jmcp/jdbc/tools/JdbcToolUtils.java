@@ -2,11 +2,7 @@ package org.peacetalk.jmcp.jdbc.tools;
 
 import org.peacetalk.jmcp.jdbc.tools.results.ColumnMetadata;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;

@@ -87,6 +87,49 @@ public class McpClient implements AutoCloseable {
     }
 
     /**
+     * List available resources from the server
+     */
+    public ListResourcesResult listResources() throws IOException {
+        return listResources(null);
+    }
+
+    /**
+     * List available resources from the server with pagination
+     * @param cursor Optional pagination cursor
+     */
+    public ListResourcesResult listResources(String cursor) throws IOException {
+        Map<String, Object> params = new HashMap<>();
+        if (cursor != null) {
+            params.put("cursor", cursor);
+        }
+
+        JsonRpcResponse response = transport.sendRequest("resources/list", params);
+
+        if (response.error() != null) {
+            throw new IOException("Failed to list resources: " + response.error().message());
+        }
+
+        return MAPPER.convertValue(response.result(), ListResourcesResult.class);
+    }
+
+    /**
+     * Read a resource by URI
+     * @param uri The resource URI to read
+     */
+    public ReadResourceResult readResource(String uri) throws IOException {
+        Map<String, Object> params = new HashMap<>();
+        params.put("uri", uri);
+
+        JsonRpcResponse response = transport.sendRequest("resources/read", params);
+
+        if (response.error() != null) {
+            throw new IOException("Failed to read resource: " + response.error().message());
+        }
+
+        return MAPPER.convertValue(response.result(), ReadResourceResult.class);
+    }
+
+    /**
      * Get server information from initialization
      */
     public InitializeResult getServerInfo() {
@@ -119,4 +162,3 @@ public class McpClient implements AutoCloseable {
         transport.close();
     }
 }
-

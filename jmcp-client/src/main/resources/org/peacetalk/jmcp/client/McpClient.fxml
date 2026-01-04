@@ -31,46 +31,90 @@
     <center>
         <SplitPane dividerPositions="0.35" orientation="HORIZONTAL">
 
-            <!-- Left: Tool Details Panel -->
+            <!-- Left: Tool/Resource Details Panel -->
             <VBox spacing="10" style="-fx-padding: 10;" minWidth="300" prefWidth="400">
-                <Label text="Tool Details" styleClass="section-header"/>
+                <TabPane fx:id="leftTabPane" tabClosingPolicy="UNAVAILABLE">
+                    <!-- Tools Tab -->
+                    <Tab text="Tools">
+                        <VBox spacing="10" style="-fx-padding: 10;">
+                            <!-- Tool Selection Dropdown -->
+                            <VBox spacing="5">
+                                <Label text="Select Tool:"/>
+                                <ComboBox fx:id="toolsComboBox" maxWidth="Infinity" promptText="Choose a tool...">
+                                    <placeholder>
+                                        <Label text="Connect to a server to see tools"/>
+                                    </placeholder>
+                                </ComboBox>
+                            </VBox>
 
-                <!-- Tool Selection Dropdown -->
-                <VBox spacing="5">
-                    <Label text="Select Tool:"/>
-                    <ComboBox fx:id="toolsComboBox" maxWidth="Infinity" promptText="Choose a tool...">
-                        <placeholder>
-                            <Label text="Connect to a server to see tools"/>
-                        </placeholder>
-                    </ComboBox>
-                </VBox>
+                            <Separator/>
 
-                <Separator/>
+                            <!-- Execute Button -->
+                            <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
+                                   maxWidth="Infinity" styleClass="primary-button"/>
 
-                <!-- Execute Button -->
-                <Button fx:id="executeButton" text="Execute Tool" onAction="#onExecute"
-                       maxWidth="Infinity" styleClass="primary-button"/>
+                            <Separator/>
 
-                <Separator/>
+                            <!-- Arguments Section -->
+                            <VBox spacing="5" VBox.vgrow="ALWAYS">
+                                <Label text="Arguments" styleClass="section-header"/>
+                                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
+                                    <VBox fx:id="argumentsBox" spacing="5" style="-fx-padding: 5;">
+                                        <Label text="Select a tool to see arguments"/>
+                                    </VBox>
+                                </ScrollPane>
+                            </VBox>
 
-                <!-- Arguments Section -->
-                <VBox spacing="5" VBox.vgrow="ALWAYS">
-                    <Label text="Arguments" styleClass="section-header"/>
-                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS">
-                        <VBox fx:id="argumentsBox" spacing="5" style="-fx-padding: 5;">
-                            <Label text="Select a tool to see arguments"/>
+                            <Separator/>
+
+                            <!-- Tool Description (at bottom) -->
+                            <VBox spacing="5">
+                                <Label text="Description:"/>
+                                <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
+                                         prefRowCount="5"/>
+                            </VBox>
                         </VBox>
-                    </ScrollPane>
-                </VBox>
+                    </Tab>
 
-                <Separator/>
+                    <!-- Resources Tab -->
+                    <Tab text="Resources">
+                        <VBox spacing="10" style="-fx-padding: 10;">
+                            <!-- Resource Selection -->
+                            <VBox spacing="5">
+                                <Label text="Select Resource:"/>
+                                <ComboBox fx:id="resourcesComboBox" maxWidth="Infinity" promptText="Choose a resource...">
+                                    <placeholder>
+                                        <Label text="Connect to a server to see resources"/>
+                                    </placeholder>
+                                </ComboBox>
+                            </VBox>
 
-                <!-- Tool Description (at bottom) -->
-                <VBox spacing="5">
-                    <Label text="Description:"/>
-                    <TextArea fx:id="toolDescriptionArea" editable="false" wrapText="true"
-                             prefRowCount="5"/>
-                </VBox>
+                            <Separator/>
+
+                            <!-- Read Resource Button -->
+                            <Button fx:id="readResourceButton" text="Read Resource" onAction="#onReadResource"
+                                   maxWidth="Infinity" styleClass="primary-button"/>
+
+                            <Separator/>
+
+                            <!-- Resource Info -->
+                            <VBox spacing="5" VBox.vgrow="ALWAYS">
+                                <Label text="Resource Details" styleClass="section-header"/>
+                                <VBox fx:id="resourceDetailsBox" spacing="5" style="-fx-padding: 5;">
+                                    <Label text="Select a resource to see details"/>
+                                </VBox>
+                            </VBox>
+
+                            <Separator/>
+
+                            <!-- URI Display -->
+                            <VBox spacing="5">
+                                <Label text="Resource URI:"/>
+                                <TextField fx:id="resourceUriField" editable="false"/>
+                            </VBox>
+                        </VBox>
+                    </Tab>
+                </TabPane>
             </VBox>
 
             <!-- Right: Output Panel -->
@@ -81,9 +125,22 @@
                 </HBox>
                 <TabPane VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
                     <Tab text="Result">
-                        <TextArea fx:id="resultArea" editable="false" wrapText="true">
-                            <promptText>Tool results will appear here...</promptText>
-                        </TextArea>
+                        <StackPane fx:id="resultStackPane">
+                            <!-- Tool result view -->
+                            <TextArea fx:id="resultArea" editable="false" wrapText="true">
+                                <promptText>Tool results will appear here...</promptText>
+                            </TextArea>
+                            <!-- Resource result view -->
+                            <VBox fx:id="resourceResultView" spacing="5" visible="false" managed="false">
+                                <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 5;">
+                                    <Button fx:id="backButton" text="← Back" onAction="#onResourceBack"/>
+                                    <Label fx:id="resourceBreadcrumb" text="" style="-fx-font-size: 11px; -fx-text-fill: gray;"/>
+                                </HBox>
+                                <ScrollPane fx:id="resourceResultScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
+                                    <!-- NavigableResourceView will be added programmatically -->
+                                </ScrollPane>
+                            </VBox>
+                        </StackPane>
                     </Tab>
                     <Tab text="Communication Log">
                         <TextArea fx:id="communicationLogArea" editable="false" wrapText="false"

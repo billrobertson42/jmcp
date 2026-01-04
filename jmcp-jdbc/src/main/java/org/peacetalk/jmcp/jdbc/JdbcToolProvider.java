@@ -1,10 +1,12 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.config.JdbcConfiguration;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
 import org.peacetalk.jmcp.jdbc.tools.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -23,12 +25,14 @@ import java.util.List;
  * - Manages JDBC driver loading and classloader isolation
  * - Manages database connections
  * - Provides read-only database query and inspection tools
+ * - Provides a resource provider for navigable database resources
  */
 public class JdbcToolProvider implements ToolProvider {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private JdbcDriverManager driverManager;
     private ConnectionManager connectionManager;
+    private JdbcResourceProvider resourceProvider;
     private final List<Tool> tools;
 
     public JdbcToolProvider() {
@@ -74,6 +78,11 @@ public class JdbcToolProvider implements ToolProvider {
         tools.add(new JdbcToolAdapter(new ListSchemasTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new DescribeTableTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new GetRowCountTool(), connectionManager));
+
+        // Initialize resource provider
+        resourceProvider = new JdbcResourceProvider();
+        resourceProvider.setConnectionManager(connectionManager);
+        resourceProvider.initialize();
     }
 
     @Override
@@ -81,8 +90,21 @@ public class JdbcToolProvider implements ToolProvider {
         return new ArrayList<>(tools);
     }
 
+    /**
+     * Get the resource provider created by this tool provider.
+     * The resource provider shares the same connection manager.
+     *
+     * @return the JDBC resource provider, or null if not initialized
+     */
+    public ResourceProvider getResourceProvider() {
+        return resourceProvider;
+    }
+
     @Override
     public void shutdown() {
+        if (resourceProvider != null) {
+            resourceProvider.shutdown();
+        }
         if (connectionManager != null) {
             System.err.println("Closing all database connections...");
             connectionManager.closeAll();

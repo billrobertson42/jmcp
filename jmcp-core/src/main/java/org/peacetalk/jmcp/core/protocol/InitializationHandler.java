@@ -40,7 +40,7 @@ public class InitializationHandler implements McpProtocolHandler {
             null, // experimental
             null, // logging
             null, // prompts
-            null, // resources
+            new ServerCapabilities.ResourcesCapability(false, false), // resources (no subscribe/listChanged)
             new ServerCapabilities.ToolsCapability(false) // tools (no listChanged support yet)
         );
 

@@ -4,7 +4,10 @@ import org.peacetalk.jmcp.client.CommunicationListener;
 import org.peacetalk.jmcp.client.McpClient;
 import org.peacetalk.jmcp.core.model.CallToolResult;
 import org.peacetalk.jmcp.core.model.InitializeResult;
+import org.peacetalk.jmcp.core.model.ListResourcesResult;
 import org.peacetalk.jmcp.core.model.ListToolsResult;
+import org.peacetalk.jmcp.core.model.ReadResourceResult;
+import org.peacetalk.jmcp.core.model.ResourceDescriptor;
 import org.peacetalk.jmcp.core.model.Tool;
 
 import java.util.List;
@@ -108,6 +111,62 @@ public class McpService {
         }
 
         return client.callTool(toolName, arguments);
+    }
+
+    /**
+     * List all available resources from the server.
+     *
+     * @return List of resources result
+     * @throws Exception if listing resources fails
+     */
+    public ListResourcesResult listResources() throws Exception {
+        if (client == null) {
+            throw new IllegalStateException("Not connected to server");
+        }
+
+        return client.listResources();
+    }
+
+    /**
+     * List resources with pagination cursor.
+     *
+     * @param cursor Pagination cursor from previous result
+     * @return List of resources result
+     * @throws Exception if listing resources fails
+     */
+    public ListResourcesResult listResources(String cursor) throws Exception {
+        if (client == null) {
+            throw new IllegalStateException("Not connected to server");
+        }
+
+        return client.listResources(cursor);
+    }
+
+    /**
+     * Sort resources alphabetically by name (case-insensitive).
+     *
+     * @param resources List of resources to sort
+     * @return Sorted list of resources
+     */
+    public List<ResourceDescriptor> sortResources(List<ResourceDescriptor> resources) {
+        return resources.stream()
+                .sorted((r1, r2) -> r1.name().compareToIgnoreCase(r2.name()))
+                .toList();
+    }
+
+    /**
+     * Read a resource by URI.
+     *
+     * @param uri The resource URI to read
+     * @return Resource content result
+     * @throws Exception if reading the resource fails
+     */
+    public ReadResourceResult readResource(String uri) throws Exception {
+        if (client == null) {
+            throw new IllegalStateException("Not connected to server");
+        }
+
+        return client.readResource(uri);
     }
 
     /**

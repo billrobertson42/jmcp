@@ -1,8 +1,10 @@
 package org.peacetalk.jmcp.server;
 
+import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.protocol.InitializationHandler;
 import org.peacetalk.jmcp.core.protocol.McpServer;
+import org.peacetalk.jmcp.core.protocol.ResourcesHandler;
 import org.peacetalk.jmcp.core.protocol.ToolsHandler;
 import org.peacetalk.jmcp.jdbc.JdbcToolProvider;
 import org.peacetalk.jmcp.transport.stdio.StdioTransport;
@@ -13,7 +15,7 @@ import org.peacetalk.jmcp.transport.stdio.StdioTransport;
 public class Main {
 
     static void main(String[] args) {
-        ToolProvider toolProvider = null;
+        JdbcToolProvider toolProvider = null;
         StdioTransport transport = null;
 
         try {
@@ -35,13 +37,22 @@ public class Main {
             toolsHandler.registerToolProvider(toolProvider);
             mcpServer.registerHandler(toolsHandler);
 
+            // Register resources handler with the resource provider
+            ResourceProvider resourceProvider = toolProvider.getResourceProvider();
+            if (resourceProvider != null) {
+                ResourcesHandler resourcesHandler = new ResourcesHandler();
+                resourcesHandler.registerResourceProvider(resourceProvider);
+                mcpServer.registerHandler(resourcesHandler);
+                System.err.println("Registered resource provider: " + resourceProvider.getName());
+            }
+
             // Start stdio transport
             transport = new StdioTransport();
 
             System.err.println("JDBC MCP Server starting...");
 
             // Setup final references for shutdown hook
-            final ToolProvider finalToolProvider = toolProvider;
+            final JdbcToolProvider finalToolProvider = toolProvider;
             final StdioTransport finalTransport = transport;
 
             // Add shutdown hook
@@ -86,7 +97,4 @@ public class Main {
             System.exit(1);
         }
     }
-
-
 }
-
