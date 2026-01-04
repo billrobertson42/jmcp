@@ -35,7 +35,7 @@ public class TableResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/table/" + tableName;
+        return tableUri(connectionId, schemaName, tableName);
     }
 
     @Override
@@ -45,7 +45,7 @@ public class TableResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Table structure details including columns, primary keys, indexes, and foreign keys.";
+        return "Table structure details including columns, primary keys, indexes, foreign keys (outgoing references), and reverse foreign keys (incoming references).";
     }
 
     @Override
@@ -61,6 +61,7 @@ public class TableResource implements Resource {
         List<String> primaryKey = new ArrayList<>();
         List<IndexInfo> indexes = new ArrayList<>();
         List<ForeignKeyInfo> foreignKeys = new ArrayList<>();
+        List<ReverseForeignKeyInfo> reverseForeignKeys = new ArrayList<>();
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -140,7 +141,7 @@ public class TableResource implements Resource {
                                 currentPkSchema,
                                 currentPkTable,
                                 new ArrayList<>(currentMappings),
-                                SCHEME + "://connection/" + connectionId + "/schema/" + currentPkSchema + "/table/" + currentPkTable
+                                tableUri(connectionId, currentPkSchema, currentPkTable)
                             ));
                         }
                         currentFkName = fkName;
@@ -157,7 +158,52 @@ public class TableResource implements Resource {
                         currentPkSchema,
                         currentPkTable,
                         currentMappings,
-                        SCHEME + "://connection/" + connectionId + "/schema/" + currentPkSchema + "/table/" + currentPkTable
+                        tableUri(connectionId, currentPkSchema, currentPkTable)
+                    ));
+                }
+            }
+
+            // Get exported keys (reverse foreign keys - tables that reference this table)
+            try (ResultSet rs = metaData.getExportedKeys(null, schemaName, tableName)) {
+                String currentFkName = null;
+                List<ColumnMapping> currentMappings = new ArrayList<>();
+                String currentFkTable = null;
+                String currentFkSchema = null;
+
+                while (rs.next()) {
+                    String fkName = rs.getString("FK_NAME");
+                    String fkColumn = rs.getString("FKCOLUMN_NAME");
+                    String fkTable = rs.getString("FKTABLE_NAME");
+                    String fkSchema = rs.getString("FKTABLE_SCHEM");
+                    String pkColumn = rs.getString("PKCOLUMN_NAME");
+
+                    if (fkName == null) continue;
+
+                    if (!fkName.equals(currentFkName)) {
+                        if (currentFkName != null) {
+                            reverseForeignKeys.add(new ReverseForeignKeyInfo(
+                                currentFkName,
+                                currentFkSchema,
+                                currentFkTable,
+                                new ArrayList<>(currentMappings),
+                                tableUri(connectionId, currentFkSchema, currentFkTable)
+                            ));
+                        }
+                        currentFkName = fkName;
+                        currentMappings.clear();
+                        currentFkTable = fkTable;
+                        currentFkSchema = fkSchema;
+                    }
+                    currentMappings.add(new ColumnMapping(pkColumn, fkColumn));
+                }
+
+                if (currentFkName != null) {
+                    reverseForeignKeys.add(new ReverseForeignKeyInfo(
+                        currentFkName,
+                        currentFkSchema,
+                        currentFkTable,
+                        currentMappings,
+                        tableUri(connectionId, currentFkSchema, currentFkTable)
                     ));
                 }
             }
@@ -171,8 +217,9 @@ public class TableResource implements Resource {
             primaryKey,
             indexes,
             foreignKeys,
+            reverseForeignKeys,
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/tables"
+                schemaUri(connectionId, schemaName)
             )
         );
 
@@ -190,6 +237,7 @@ public class TableResource implements Resource {
         List<String> primaryKey,
         List<IndexInfo> indexes,
         List<ForeignKeyInfo> foreignKeys,
+        List<ReverseForeignKeyInfo> reverseForeignKeys,
         NavigationLinks links
     ) {}
 
@@ -225,6 +273,18 @@ public class TableResource implements Resource {
         String referencedTable,
         List<ColumnMapping> columns,
         String referencedTableUri
+    ) {}
+
+    /**
+     * Reverse foreign key information (tables that reference this table)
+     * with navigation link to the referencing table
+     */
+    public record ReverseForeignKeyInfo(
+        String name,
+        String referencingSchema,
+        String referencingTable,
+        List<ColumnMapping> columns,
+        String referencingTableUri
     ) {}
 
     /**

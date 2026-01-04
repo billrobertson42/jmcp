@@ -9,7 +9,10 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.MAPPER;
-import static org.peacetalk.jmcp.jdbc.resources.Util.SCHEME;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionUri;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionsUri;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionSchemasUri;
+import static org.peacetalk.jmcp.jdbc.resources.Util.relationshipsUri;
 
 /**
  * Resource representing a specific database connection.
@@ -29,7 +32,7 @@ public class ConnectionResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId;
+        return connectionUri(connectionId);
     }
 
     @Override
@@ -76,8 +79,9 @@ public class ConnectionResource implements Resource {
             info.username(),
             dbInfo,
             new NavigationLinks(
-                SCHEME + "://connections",
-                SCHEME + "://connection/" + connectionId + "/schemas"
+                connectionsUri(),
+                connectionSchemasUri(connectionId),
+                relationshipsUri(connectionId)
             )
         );
 
@@ -113,7 +117,8 @@ public class ConnectionResource implements Resource {
      */
     public record NavigationLinks(
         String parent,
-        String schemas
+        String schemas,
+        String relationships
     ) {}
 }
 

@@ -11,8 +11,7 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.peacetalk.jmcp.jdbc.resources.Util.MAPPER;
-import static org.peacetalk.jmcp.jdbc.resources.Util.SCHEME;
+import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
 /**
  * Resource representing a specific view in a schema.
@@ -37,7 +36,7 @@ public class ViewResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/view/" + viewName;
+        return viewUri(connectionId, schemaName, viewName);
     }
 
     @Override
@@ -47,7 +46,7 @@ public class ViewResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "View structure details including columns.";
+        return "View structure details including columns and SQL definition.";
     }
 
     @Override
@@ -61,6 +60,7 @@ public class ViewResource implements Resource {
 
         List<ColumnInfo> columns = new ArrayList<>();
         String viewRemarks = null;
+        String viewDefinition = null;
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -85,6 +85,9 @@ public class ViewResource implements Resource {
                     ));
                 }
             }
+
+            // Get view definition - database-specific queries
+            viewDefinition = getViewDefinition(conn, schemaName, viewName);
         }
 
         ViewResponse response = new ViewResponse(
@@ -92,13 +95,100 @@ public class ViewResource implements Resource {
             schemaName,
             connectionId,
             viewRemarks,
+            viewDefinition,
             columns,
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/views"
+                schemaUri(connectionId, schemaName)
             )
         );
 
         return MAPPER.writeValueAsString(response);
+    }
+
+    /**
+     * Get the view definition SQL using database-specific queries.
+     * Attempts multiple strategies to retrieve the view definition across different databases.
+     */
+    private String getViewDefinition(Connection conn, String schema, String view) {
+        // Strategy 1: Try INFORMATION_SCHEMA.VIEWS (SQL standard, works for most databases)
+        String sql1 = "SELECT VIEW_DEFINITION FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+        try (var stmt = conn.prepareStatement(sql1)) {
+            stmt.setString(1, schema);
+            stmt.setString(2, view);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String def = rs.getString(1);
+                    if (def != null && !def.isEmpty()) {
+                        return def;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore and try next strategy
+        }
+
+        // Strategy 2: Try database-specific system tables
+        // PostgreSQL: pg_views
+        String sql2 = "SELECT definition FROM pg_views WHERE schemaname = ? AND viewname = ?";
+        try (var stmt = conn.prepareStatement(sql2)) {
+            stmt.setString(1, schema);
+            stmt.setString(2, view);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String def = rs.getString(1);
+                    if (def != null && !def.isEmpty()) {
+                        return def;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore and try next strategy
+        }
+
+        // Strategy 3: MySQL - use SHOW CREATE VIEW
+        String sql3 = "SHOW CREATE VIEW " + escapeIdentifier(schema) + "." + escapeIdentifier(view);
+        try (var stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql3)) {
+            if (rs.next()) {
+                // SHOW CREATE VIEW returns multiple columns, the view definition is usually in column 2
+                String def = rs.getString(2);
+                if (def != null && !def.isEmpty()) {
+                    return def;
+                }
+            }
+        } catch (Exception e) {
+            // Ignore and try next strategy
+        }
+
+        // Strategy 4: H2 Database
+        String sql4 = "SELECT SQL FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?";
+        try (var stmt = conn.prepareStatement(sql4)) {
+            stmt.setString(1, schema);
+            stmt.setString(2, view);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    String def = rs.getString(1);
+                    if (def != null && !def.isEmpty()) {
+                        return def;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Ignore - unable to retrieve
+        }
+
+        return null; // Could not retrieve view definition
+    }
+
+    /**
+     * Simple identifier escaping for SQL queries.
+     */
+    private String escapeIdentifier(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        // Simple backtick escaping for MySQL-style databases
+        return "`" + identifier.replace("`", "``") + "`";
     }
 
     /**
@@ -109,6 +199,7 @@ public class ViewResource implements Resource {
         String schema,
         String connectionId,
         String remarks,
+        String viewDefinition,
         List<ColumnInfo> columns,
         NavigationLinks links
     ) {}

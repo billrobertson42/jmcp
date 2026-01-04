@@ -107,7 +107,7 @@ public class JdbcResourceProvider implements ResourceProvider {
     }
 
     /**
-     * Handle schema-level resources: connection/{id}/schemas, connection/{id}/schema/{schema}
+     * Handle schema-level resources: connection/{id}/schemas, connection/{id}/relationships
      */
     private Resource handleSchemaLevelResource(String type, String connectionId, String schemaType) {
         if (!"connection".equals(type)) {
@@ -117,11 +117,11 @@ public class JdbcResourceProvider implements ResourceProvider {
             return null;
         }
 
-        if ("schemas".equals(schemaType)) {
-            return new SchemasListResource(connectionId, connectionManager);
-        }
-
-        return null;
+        return switch (schemaType) {
+            case "schemas" -> new SchemasListResource(connectionId, connectionManager);
+            case "relationships" -> new RelationshipsResource(connectionId, connectionManager);
+            default -> null;
+        };
     }
 
     /**
@@ -140,7 +140,7 @@ public class JdbcResourceProvider implements ResourceProvider {
     }
 
     /**
-     * Handle object collection resources: tables, views
+     * Handle object collection resources: relationships
      */
     private Resource handleObjectResource(String type, String connectionId,
                                          String schemaType, String schemaName,
@@ -152,11 +152,10 @@ public class JdbcResourceProvider implements ResourceProvider {
             return null;
         }
 
-        return switch (objectTypeOrCollection) {
-            case "tables" -> new TablesListResource(connectionId, schemaName, connectionManager);
-            case "views" -> new ViewsListResource(connectionId, schemaName, connectionManager);
-            default -> null;
-        };
+        if ("relationships".equals(objectTypeOrCollection)) {
+            return new SchemaRelationshipsResource(connectionId, schemaName, connectionManager);
+        }
+        return null;
     }
 
     /**

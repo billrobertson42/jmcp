@@ -173,39 +173,22 @@ class JdbcResourcesTest {
 
         JsonNode json = mapper.readTree(result);
         assertEquals("TEST_SCHEMA", json.get("name").asString());
-        assertTrue(json.has("tableCount"));
-        assertTrue(json.has("viewCount"));
+        assertTrue(json.has("tables"));
+        assertTrue(json.has("views"));
         assertTrue(json.has("links"));
 
         // We created 2 tables (users, orders) and 1 view
-        assertEquals(2, json.get("tableCount").asInt());
-        assertEquals(1, json.get("viewCount").asInt());
-    }
+        JsonNode tables = json.get("tables");
+        assertEquals(2, tables.size());
+        // Check that tables have name and uri fields
+        assertTrue(tables.get(0).has("name"));
+        assertTrue(tables.get(0).has("uri"));
 
-    // TablesListResource tests
-
-    @Test
-    void testTablesListResourceMetadata() {
-        TablesListResource resource = new TablesListResource("testdb", "TEST_SCHEMA", mockConnectionManager);
-
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/tables", resource.getUri());
-        assertEquals("Tables in TEST_SCHEMA", resource.getName());
-        assertNotNull(resource.getDescription());
-        assertEquals("application/json", resource.getMimeType());
-    }
-
-    @Test
-    void testTablesListResourceRead() throws Exception {
-        TablesListResource resource = new TablesListResource("testdb", "TEST_SCHEMA", mockConnectionManager);
-
-        String result = resource.read();
-        assertNotNull(result);
-
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("tables"));
-        assertTrue(json.has("count"));
-        assertEquals(2, json.get("count").asInt());
-        assertTrue(json.has("links"));
+        JsonNode views = json.get("views");
+        assertEquals(1, views.size());
+        // Check that views have name and uri fields
+        assertTrue(views.get(0).has("name"));
+        assertTrue(views.get(0).has("uri"));
     }
 
     // TableResource tests
@@ -238,6 +221,11 @@ class JdbcResourcesTest {
         // Check columns
         JsonNode columns = json.get("columns");
         assertEquals(2, columns.size()); // id and name columns
+
+        // Verify parent link points to schema (not deleted tables list)
+        JsonNode links = json.get("links");
+        assertTrue(links.has("parent"));
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
     }
 
     @Test
@@ -258,31 +246,116 @@ class JdbcResourcesTest {
         assertTrue(fk.has("referencedTableUri"));
     }
 
-    // ViewsListResource tests
-
     @Test
-    void testViewsListResourceMetadata() {
-        ViewsListResource resource = new ViewsListResource("testdb", "TEST_SCHEMA", mockConnectionManager);
-
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/views", resource.getUri());
-        assertEquals("Views in TEST_SCHEMA", resource.getName());
-        assertNotNull(resource.getDescription());
-        assertEquals("application/json", resource.getMimeType());
-    }
-
-    @Test
-    void testViewsListResourceRead() throws Exception {
-        ViewsListResource resource = new ViewsListResource("testdb", "TEST_SCHEMA", mockConnectionManager);
+    void testTableResourceIncludesReverseForeignKeys() throws Exception {
+        // Test that users table (which is referenced by orders) includes reverse foreign keys
+        TableResource resource = new TableResource("testdb", "TEST_SCHEMA", "USERS", mockConnectionManager);
 
         String result = resource.read();
         assertNotNull(result);
 
         JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("views"));
-        assertTrue(json.has("count"));
-        assertEquals(1, json.get("count").asInt());
-        assertTrue(json.has("links"));
+        assertTrue(json.has("reverseForeignKeys"));
+
+        JsonNode reverseFks = json.get("reverseForeignKeys");
+        assertFalse(reverseFks.isEmpty());
+
+        // Orders table references Users, so Users should have a reverse FK
+        JsonNode reverseFk = reverseFks.get(0);
+        assertEquals("ORDERS", reverseFk.get("referencingTable").asString());
+        assertTrue(reverseFk.has("referencingTableUri"));
     }
+
+    // RelationshipsResource tests
+
+    @Test
+    void testRelationshipsResourceMetadata() {
+        RelationshipsResource resource = new RelationshipsResource("testdb", mockConnectionManager);
+
+        assertEquals("db://connection/testdb/relationships", resource.getUri());
+        assertEquals("Relationships for connection: testdb", resource.getName());
+        assertNotNull(resource.getDescription());
+        assertEquals("application/json", resource.getMimeType());
+    }
+
+    @Test
+    void testRelationshipsResourceRead() throws Exception {
+        RelationshipsResource resource = new RelationshipsResource("testdb", mockConnectionManager);
+
+        String result = resource.read();
+        assertNotNull(result);
+
+        JsonNode json = mapper.readTree(result);
+        assertTrue(json.has("connectionId"));
+        assertEquals("testdb", json.get("connectionId").asString());
+        assertTrue(json.has("relationships"));
+        assertTrue(json.has("links"));
+
+        JsonNode relationships = json.get("relationships");
+        assertFalse(relationships.isEmpty());
+
+        // Should have at least the orders -> users FK
+        boolean foundOrdersUsersFK = false;
+        for (int i = 0; i < relationships.size(); i++) {
+            JsonNode rel = relationships.get(i);
+            if ("ORDERS".equals(rel.get("fromTable").asString()) &&
+                "USERS".equals(rel.get("toTable").asString())) {
+                foundOrdersUsersFK = true;
+                assertTrue(rel.has("columns"));
+                assertTrue(rel.has("fromTableUri"));
+                assertTrue(rel.has("toTableUri"));
+            }
+        }
+        assertTrue(foundOrdersUsersFK, "Should find ORDERS -> USERS relationship");
+    }
+
+    // SchemaRelationshipsResource tests
+
+    @Test
+    void testSchemaRelationshipsResourceMetadata() {
+        SchemaRelationshipsResource resource = new SchemaRelationshipsResource("testdb", "TEST_SCHEMA", mockConnectionManager);
+
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/relationships", resource.getUri());
+        assertEquals("Relationships for schema: TEST_SCHEMA", resource.getName());
+        assertNotNull(resource.getDescription());
+        assertEquals("application/json", resource.getMimeType());
+    }
+
+    @Test
+    void testSchemaRelationshipsResourceRead() throws Exception {
+        SchemaRelationshipsResource resource = new SchemaRelationshipsResource("testdb", "TEST_SCHEMA", mockConnectionManager);
+
+        String result = resource.read();
+        assertNotNull(result);
+
+        JsonNode json = mapper.readTree(result);
+        assertTrue(json.has("connectionId"));
+        assertEquals("testdb", json.get("connectionId").asString());
+        assertTrue(json.has("schema"));
+        assertEquals("TEST_SCHEMA", json.get("schema").asString());
+        assertTrue(json.has("relationships"));
+        assertTrue(json.has("links"));
+
+        JsonNode relationships = json.get("relationships");
+        assertFalse(relationships.isEmpty());
+
+        // Should have the orders -> users FK (both in TEST_SCHEMA)
+        boolean foundOrdersUsersFK = false;
+        for (int i = 0; i < relationships.size(); i++) {
+            JsonNode rel = relationships.get(i);
+            if ("ORDERS".equals(rel.get("fromTable").asString()) &&
+                "USERS".equals(rel.get("toTable").asString())) {
+                foundOrdersUsersFK = true;
+                assertEquals("TEST_SCHEMA", rel.get("fromSchema").asString());
+                assertEquals("TEST_SCHEMA", rel.get("toSchema").asString());
+                assertTrue(rel.has("columns"));
+                assertTrue(rel.has("fromTableUri"));
+                assertTrue(rel.has("toTableUri"));
+            }
+        }
+        assertTrue(foundOrdersUsersFK, "Should find ORDERS -> USERS relationship in TEST_SCHEMA");
+    }
+
 
     // ViewResource tests
 
@@ -306,11 +379,22 @@ class JdbcResourcesTest {
         JsonNode json = mapper.readTree(result);
         assertEquals("USER_ORDERS", json.get("name").asString());
         assertTrue(json.has("columns"));
+        assertTrue(json.has("viewDefinition"));
         assertTrue(json.has("links"));
+
+        // View definition should be present (may be null if DB doesn't support it)
+        // For H2, it should retrieve the definition
+        JsonNode viewDef = json.get("viewDefinition");
+        assertNotNull(viewDef); // Field should exist even if null
 
         // Check columns (name and total from the view)
         JsonNode columns = json.get("columns");
         assertEquals(2, columns.size());
+
+        // Verify parent link points to schema (not deleted views list)
+        JsonNode links = json.get("links");
+        assertTrue(links.has("parent"));
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
     }
 }
 

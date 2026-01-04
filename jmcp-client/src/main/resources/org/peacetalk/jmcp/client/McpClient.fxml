@@ -134,7 +134,7 @@
                             <VBox fx:id="resourceResultView" spacing="5" visible="false" managed="false">
                                 <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-padding: 5;">
                                     <Button fx:id="backButton" text="← Back" onAction="#onResourceBack"/>
-                                    <Label fx:id="resourceBreadcrumb" text="" style="-fx-font-size: 11px; -fx-text-fill: gray;"/>
+                                    <Label fx:id="resourceBreadcrumb" text="" style="-fx-font-size: 14px; -fx-text-fill: #333333; -fx-font-weight: bold;"/>
                                 </HBox>
                                 <ScrollPane fx:id="resourceResultScrollPane" fitToWidth="true" VBox.vgrow="ALWAYS">
                                     <!-- NavigableResourceView will be added programmatically -->

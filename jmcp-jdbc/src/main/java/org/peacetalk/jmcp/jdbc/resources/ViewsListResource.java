@@ -33,7 +33,7 @@ public class ViewsListResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/views";
+        return schemaViewsUri(connectionId, schemaName);
     }
 
     @Override
@@ -70,7 +70,7 @@ public class ViewsListResource implements Resource {
                         viewName,
                         tableType,
                         remarks,
-                        SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/view/" + viewName
+                        viewUri(connectionId, schemaName, viewName)
                     ));
                 }
             }
@@ -80,7 +80,7 @@ public class ViewsListResource implements Resource {
             views,
             views.size(),
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName
+                schemaUri(connectionId, schemaName)
             )
         );
 

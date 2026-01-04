@@ -9,7 +9,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.MAPPER;
-import static org.peacetalk.jmcp.jdbc.resources.Util.SCHEME;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionsUri;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionUri;
+import static org.peacetalk.jmcp.jdbc.resources.Util.connectionSchemasUri;
 
 /**
  * Resource representing the list of all database connections.
@@ -27,7 +29,7 @@ public class ConnectionsListResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connections";
+        return connectionsUri();
     }
 
     @Override
@@ -55,8 +57,8 @@ public class ConnectionsListResource implements Resource {
                 info.databaseType(),
                 JdbcUrlSanitizer.getExposableUrl(info.url(), connectionManager.isExposeUrls()),
                 info.username(),
-                SCHEME + "://connection/" + info.id(),
-                SCHEME + "://connection/" + info.id() + "/schemas"
+                connectionUri(info.id()),
+                connectionSchemasUri(info.id())
             ));
         }
 

@@ -35,7 +35,7 @@ public class ContextResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://context";
+        return contextUri();
     }
 
     @Override
@@ -103,7 +103,8 @@ public class ContextResource implements Resource {
                             tableCount,
                             viewCount,
                             tableNames,
-                            viewNames
+                            viewNames,
+                            schemaUri(info.id(), schemaName)
                         ));
                     }
                 }
@@ -121,6 +122,7 @@ public class ContextResource implements Resource {
         ContextResponse response = new ContextResponse(
             connections,
             getToolsInfo(),
+            getResourceInfo(),
             getUsageHints()
         );
 
@@ -174,13 +176,77 @@ public class ContextResource implements Resource {
         );
     }
 
+    private ResourceNavigationInfo getResourceInfo() {
+        List<ResourceTemplate> templates = List.of(
+            new ResourceTemplate(
+                "db://connections",
+                "List of all database connections",
+                "Root resource listing all available connections"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}",
+                "Connection details",
+                "Database metadata and navigation links"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/relationships",
+                "Complete FK relationship graph",
+                "All foreign key relationships across all schemas in the database"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schemas",
+                "List of schemas",
+                "All schemas in this database connection"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}",
+                "Schema details",
+                "Schema with lists of all tables and views (includes URIs for direct navigation)"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/relationships",
+                "Schema FK relationships",
+                "All foreign key relationships involving tables in this schema (including cross-schema FKs)"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/table/{table_name}",
+                "Table structure",
+                "Detailed table metadata: columns, PKs, FKs (both directions), indexes"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/view/{view_name}",
+                "View definition",
+                "View structure and SQL definition"
+            )
+        );
+
+        List<String> navigationExamples = new ArrayList<>();
+        for (ConnectionInfo info : connectionManager.listConnections()) {
+            navigationExamples.add("db://connection/" + info.id() + "/relationships");
+            break; // Just show one example
+        }
+
+        return new ResourceNavigationInfo(
+            templates,
+            navigationExamples,
+            List.of(
+                "Resources are cacheable - they represent database metadata that changes infrequently",
+                "Use db://context (this resource) for a complete overview without navigation",
+                "For specific details, navigate the resource hierarchy or use tools",
+                "Table resources include both imported FKs (this table references X) and exported FKs (X references this table)",
+                "The relationships resource provides the complete FK graph across all schemas"
+            )
+        );
+    }
+
     private List<String> getUsageHints() {
         return List.of(
             "Use database_id (not connection name) when calling tools",
             "If schema is not specified, the database's default schema is used",
             "The query tool only allows SELECT statements for safety",
             "Use describe-table to understand table structure before writing queries",
-            "Foreign keys in describe-table output show relationships between tables"
+            "Foreign keys in describe-table output show relationships between tables",
+            "Resources provide cacheable metadata; tools perform operations"
         );
     }
 
@@ -190,7 +256,26 @@ public class ContextResource implements Resource {
     public record ContextResponse(
         List<ConnectionSummary> connections,
         List<ToolInfo> availableTools,
+        ResourceNavigationInfo resources,
         List<String> usageHints
+    ) {}
+
+    /**
+     * Resource navigation information
+     */
+    public record ResourceNavigationInfo(
+        List<ResourceTemplate> uriTemplates,
+        List<String> examples,
+        List<String> navigationHints
+    ) {}
+
+    /**
+     * Resource URI template with description
+     */
+    public record ResourceTemplate(
+        String uriPattern,
+        String name,
+        String description
     ) {}
 
     /**
@@ -213,7 +298,8 @@ public class ContextResource implements Resource {
         int tableCount,
         int viewCount,
         List<String> tables,
-        List<String> views
+        List<String> views,
+        String uri
     ) {}
 
     /**

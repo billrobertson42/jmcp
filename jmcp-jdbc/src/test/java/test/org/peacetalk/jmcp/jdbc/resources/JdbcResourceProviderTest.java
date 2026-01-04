@@ -122,24 +122,10 @@ class JdbcResourceProviderTest {
     }
 
     @Test
-    void testGetResourceTables() {
-        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/tables");
-        assertNotNull(resource);
-        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/tables", resource.getUri());
-    }
-
-    @Test
     void testGetResourceTable() {
         Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/table/USERS");
         assertNotNull(resource);
         assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/table/USERS", resource.getUri());
-    }
-
-    @Test
-    void testGetResourceViews() {
-        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/views");
-        assertNotNull(resource);
-        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/views", resource.getUri());
     }
 
     @Test

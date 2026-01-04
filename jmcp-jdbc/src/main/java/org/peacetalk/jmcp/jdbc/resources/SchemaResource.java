@@ -7,6 +7,8 @@ import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -31,7 +33,7 @@ public class SchemaResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName;
+        return schemaUri(connectionId, schemaName);
     }
 
     @Override
@@ -53,23 +55,31 @@ public class SchemaResource implements Resource {
     public String read() throws Exception {
         ConnectionContext context = connectionManager.getContext(connectionId);
 
-        int tableCount = 0;
-        int viewCount = 0;
+        List<TableLink> tables = new ArrayList<>();
+        List<ViewLink> views = new ArrayList<>();
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
 
-            // Count tables
+            // Get tables
             try (ResultSet rs = metaData.getTables(null, schemaName, "%", new String[]{"TABLE"})) {
                 while (rs.next()) {
-                    tableCount++;
+                    String tableName = rs.getString("TABLE_NAME");
+                    tables.add(new TableLink(
+                        tableName,
+                        tableUri(connectionId, schemaName, tableName)
+                    ));
                 }
             }
 
-            // Count views
+            // Get views
             try (ResultSet rs = metaData.getTables(null, schemaName, "%", new String[]{"VIEW"})) {
                 while (rs.next()) {
-                    viewCount++;
+                    String viewName = rs.getString("TABLE_NAME");
+                    views.add(new ViewLink(
+                        viewName,
+                        viewUri(connectionId, schemaName, viewName)
+                    ));
                 }
             }
         }
@@ -77,12 +87,11 @@ public class SchemaResource implements Resource {
         SchemaResponse response = new SchemaResponse(
             schemaName,
             connectionId,
-            tableCount,
-            viewCount,
+            tables,
+            views,
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId + "/schemas",
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/tables",
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/views"
+                connectionSchemasUri(connectionId),
+                schemaRelationshipsUri(connectionId, schemaName)
             )
         );
 
@@ -95,9 +104,25 @@ public class SchemaResource implements Resource {
     public record SchemaResponse(
         String name,
         String connectionId,
-        int tableCount,
-        int viewCount,
+        List<TableLink> tables,
+        List<ViewLink> views,
         NavigationLinks links
+    ) {}
+
+    /**
+     * Table link with name and URI
+     */
+    public record TableLink(
+        String name,
+        String uri
+    ) {}
+
+    /**
+     * View link with name and URI
+     */
+    public record ViewLink(
+        String name,
+        String uri
     ) {}
 
     /**
@@ -105,8 +130,7 @@ public class SchemaResource implements Resource {
      */
     public record NavigationLinks(
         String parent,
-        String tables,
-        String views
+        String relationships
     ) {}
 }
 

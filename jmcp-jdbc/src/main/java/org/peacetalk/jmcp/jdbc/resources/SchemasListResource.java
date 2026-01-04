@@ -30,7 +30,7 @@ public class SchemasListResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schemas";
+        return connectionSchemasUri(connectionId);
     }
 
     @Override
@@ -68,8 +68,8 @@ public class SchemasListResource implements Resource {
                         schemaName,
                         catalogName,
                         isDefault,
-                        SCHEME + "://connection/" + connectionId + "/schema/" + schemaName,
-                        SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/tables"
+                        schemaUri(connectionId, schemaName),
+                        schemaTablesUri(connectionId, schemaName)
                     ));
                 }
             }
@@ -79,7 +79,7 @@ public class SchemasListResource implements Resource {
             schemas,
             schemas.size(),
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId
+                connectionUri(connectionId)
             )
         );
 

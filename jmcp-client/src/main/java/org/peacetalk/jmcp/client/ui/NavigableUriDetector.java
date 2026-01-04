@@ -16,14 +16,11 @@ public class NavigableUriDetector {
     private static final Set<String> URI_FIELD_NAMES = Set.of(
         "uri",
         "resourceUri",
-        "schemasUri",
-        "tablesUri",
-        "viewsUri",
+        "schemaUri",
         "parent",
-        "schemas",
-        "tables",
-        "views",
-        "referencedTableUri"
+        "relationships",
+        "referencing[a-zA-Z0-9_]+Uri",
+        "referenced[a-zA-Z0-9_]+Uri"
     );
 
     // Pattern to match resource URIs (e.g., db://...)

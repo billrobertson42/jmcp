@@ -33,7 +33,7 @@ public class TablesListResource implements Resource {
 
     @Override
     public String getUri() {
-        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/tables";
+        return schemaTablesUri(connectionId, schemaName);
     }
 
     @Override
@@ -70,7 +70,7 @@ public class TablesListResource implements Resource {
                         tableName,
                         tableType,
                         remarks,
-                        SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/table/" + tableName
+                        tableUri(connectionId, schemaName, tableName)
                     ));
                 }
             }
@@ -80,7 +80,7 @@ public class TablesListResource implements Resource {
             tables,
             tables.size(),
             new NavigationLinks(
-                SCHEME + "://connection/" + connectionId + "/schema/" + schemaName
+                schemaUri(connectionId, schemaName)
             )
         );
 
