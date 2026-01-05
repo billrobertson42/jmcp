@@ -43,7 +43,7 @@ public class SchemaResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Schema details with navigation to tables, views, and other database objects.";
+        return "Schema with lists of tables and views, including navigation URIs.";
     }
 
     @Override

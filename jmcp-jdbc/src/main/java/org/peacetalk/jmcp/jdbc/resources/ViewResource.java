@@ -46,7 +46,7 @@ public class ViewResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "View structure details including columns and SQL definition.";
+        return "View structure: columns and SQL definition.";
     }
 
     @Override

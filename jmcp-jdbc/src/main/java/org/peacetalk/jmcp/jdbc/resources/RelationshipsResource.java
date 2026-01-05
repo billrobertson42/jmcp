@@ -42,7 +42,7 @@ public class RelationshipsResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Complete foreign key relationship graph across all schemas in the database.";
+        return "Complete foreign key relationship graph for all schemas.";
     }
 
     @Override

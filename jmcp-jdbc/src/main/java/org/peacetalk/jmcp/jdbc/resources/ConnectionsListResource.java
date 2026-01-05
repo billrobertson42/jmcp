@@ -39,7 +39,7 @@ public class ConnectionsListResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "List of available database connections. Navigate to individual connections to explore schemas and tables.";
+        return "List of all configured database connections with navigation links.";
     }
 
     @Override

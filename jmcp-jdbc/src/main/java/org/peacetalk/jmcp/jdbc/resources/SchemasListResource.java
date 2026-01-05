@@ -40,7 +40,7 @@ public class SchemasListResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "List of database schemas/catalogs. Navigate to individual schemas for table listings.";
+        return "List of schemas with navigation links and metadata.";
     }
 
     @Override

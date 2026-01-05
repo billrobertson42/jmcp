@@ -35,21 +35,19 @@ public class SampleDataTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Get a sample of data from a table to preview actual values. " +
-               "Supports different sampling strategies: 'first' (first N rows), 'random' (random sample), " +
-               "'last' (last N rows based on primary key). Returns data in compact array format.";
+        return "Get sample rows from a table. Strategies: 'first', 'random', 'last'. Max " + MAX_SAMPLE_SIZE + " rows.";
     }
 
     @Override
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "table", new StringProperty("The table name to sample from"),
-                "schema", new StringProperty("Optional schema name"),
-                "sample_size", new IntegerProperty("Number of rows to sample (default: 10, max: 100)"),
-                "strategy", new StringProperty("Sampling strategy: 'first' (default), 'random', or 'last'"),
-                "columns", new StringProperty("Optional comma-separated list of columns to include (default: all columns)"),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "table", new StringProperty("Table name"),
+                "schema", new StringProperty("Schema name (optional, uses default)"),
+                "sample_size", new IntegerProperty("Rows to sample (default: " + DEFAULT_SAMPLE_SIZE + ", max: " + MAX_SAMPLE_SIZE + ")"),
+                "strategy", new StringProperty("Sampling strategy: 'first', 'random', 'last' (default: first)"),
+                "columns", new StringProperty("Comma-separated column names (optional, default: all)"),
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("table")
         );

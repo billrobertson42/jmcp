@@ -45,8 +45,7 @@ public class ContextResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Comprehensive summary of all database connections, schemas, and tables. " +
-               "Use this resource to understand what databases are available and how to query them.";
+        return "Complete overview: all connections, schemas, tables, tools, and resources.";
     }
 
     @Override
@@ -133,27 +132,27 @@ public class ContextResource implements Resource {
         return List.of(
             new ToolInfo(
                 "query",
-                "Execute a read-only SQL SELECT query",
-                "Use database_id from connections list. Returns tabular data in compact format.",
-                List.of("sql (required)", "database_id (optional)", "parameters (optional)")
+                "Execute read-only SELECT query",
+                "Returns up to 1000 rows in compact array format.",
+                List.of("sql", "parameters", "database_id")
             ),
             new ToolInfo(
                 "get-row-count",
                 "Get exact row count for a table",
-                "Fast exact count of table rows. For approximate counts, use get-table-statistics.",
-                List.of("table (required)", "schema (optional)", "database_id (optional)")
+                "Returns exact number of rows.",
+                List.of("table", "schema", "database_id")
             ),
             new ToolInfo(
                 "sample-data",
-                "Get sample data from a table",
-                "Smart sampling strategies: 'first', 'random', 'last'. Returns actual data values for preview.",
-                List.of("table (required)", "schema (optional)", "sample_size (optional, max 100)", "strategy (optional)", "columns (optional)", "database_id (optional)")
+                "Get sample rows from a table",
+                "Strategies: 'first', 'random', 'last'. Max 100 rows.",
+                List.of("table", "schema", "sample_size", "strategy", "columns", "database_id")
             ),
             new ToolInfo(
                 "analyze-column",
-                "Analyze column distribution and statistics",
-                "Returns distinct count, null count, min/max, most common values. Use for data profiling.",
-                List.of("table (required)", "column (required)", "schema (optional)", "top_values (optional, max 50)", "database_id (optional)")
+                "Analyze column data distribution",
+                "Returns distinct count, nulls, min/max, top values.",
+                List.of("table", "column", "schema", "top_values", "database_id")
             )
         );
     }
@@ -212,27 +211,21 @@ public class ContextResource implements Resource {
             templates,
             navigationExamples,
             List.of(
-                "Resources are cacheable - they represent database metadata that changes infrequently",
-                "Use db://context (this resource) for a complete overview without navigation",
-                "For specific details, navigate the resource hierarchy or use tools",
-                "Table resources include both imported FKs (this table references X) and exported FKs (X references this table)",
-                "The relationships resource provides the complete FK graph across all schemas"
+                "Resources are cacheable metadata",
+                "Table resources include FKs in both directions",
+                "Relationships resource provides complete FK graph"
             )
         );
     }
 
     private List<String> getUsageHints() {
         return List.of(
-            "Start with db://context to see available connections and resources",
-            "Use resources (not tools) to explore database structure - they're cacheable and provide navigation",
-            "Resources provide: connections list, schemas, tables, views, relationships, and complete metadata",
-            "Tools are for operations: query execution, row counts, statistics, data sampling, and analysis",
-            "Navigate resources via URIs: db://connections → db://connection/{id}/schemas → db://connection/{id}/schema/{name}",
-            "Table structure and relationships: db://connection/{id}/schema/{schema}/table/{table}",
-            "The query tool only allows SELECT statements for safety",
-            "If schema is not specified in tools, the database's default schema is used",
-            "Use sample-data tool to preview actual data values",
-            "Use analyze-column tool for data profiling and quality assessment"
+            "Start with db://context for complete overview",
+            "Use resources for structure (cacheable metadata)",
+            "Use tools for operations (query, count, sample, analyze)",
+            "Navigate: db://connections → db://connection/{id} → schema/{schema} → table/{table}",
+            "Query tool accepts SELECT only",
+            "Schema defaults to connection's default if not specified"
         );
     }
 

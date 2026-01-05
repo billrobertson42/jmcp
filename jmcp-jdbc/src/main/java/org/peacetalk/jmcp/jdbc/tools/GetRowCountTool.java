@@ -28,16 +28,16 @@ public class GetRowCountTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Get the number of rows in a table";
+        return "Get exact row count for a table.";
     }
 
     @Override
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "table", new StringProperty("The table name"),
-                "schema", new StringProperty("Optional schema name"),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "table", new StringProperty("Table name"),
+                "schema", new StringProperty("Schema name (optional, uses default)"),
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("table")
         );

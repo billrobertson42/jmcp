@@ -51,8 +51,7 @@ public class SchemaRelationshipsResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Foreign key relationships involving tables in the " + schemaName +
-               " schema (includes relationships to/from other schemas).";
+        return "Foreign key relationships involving this schema (including cross-schema FKs).";
     }
 
     @Override

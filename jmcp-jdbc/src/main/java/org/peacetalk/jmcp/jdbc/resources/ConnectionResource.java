@@ -42,7 +42,7 @@ public class ConnectionResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Database connection details with navigation to schemas, tables, and views.";
+        return "Connection metadata with navigation to schemas and relationships.";
     }
 
     @Override

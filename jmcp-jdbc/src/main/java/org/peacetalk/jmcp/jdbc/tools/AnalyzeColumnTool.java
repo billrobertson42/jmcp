@@ -36,19 +36,18 @@ public class AnalyzeColumnTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Analyze a column to understand its data distribution: distinct value count, null count, " +
-               "min/max values, and most common values with frequencies. Use for data profiling and quality assessment.";
+        return "Analyze column data: distinct count, nulls, min/max, top values with frequencies.";
     }
 
     @Override
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "table", new StringProperty("The table name"),
-                "column", new StringProperty("The column name to analyze"),
-                "schema", new StringProperty("Optional schema name"),
-                "top_values", new IntegerProperty("Number of most common values to return (default: 10, max: 50)"),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "table", new StringProperty("Table name"),
+                "column", new StringProperty("Column name to analyze"),
+                "schema", new StringProperty("Schema name (optional, uses default)"),
+                "top_values", new IntegerProperty("Most common values to return (default: " + DEFAULT_TOP_VALUES_COUNT + ", max: " + MAX_TOP_VALUES_COUNT + ")"),
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("table", "column")
         );

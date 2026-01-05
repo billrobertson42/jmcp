@@ -33,21 +33,19 @@ public class QueryTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Execute a read-only SQL SELECT query. Returns up to " + MAX_ROWS + " rows. " +
-            "Returns compact format: {\"table\":\"name\", \"schema\":\"name\", \"cols\":[\"col_name1\",\"col_name2\",...], \"rows\":[[val1,val2,...],[...]], \"count\":N}. " +
-            "Data in 'rows' as arrays where the order in each row matches the order of the columns.";
+        return "Execute read-only SELECT query. Returns up to " + MAX_ROWS + " rows in compact array format.";
     }
 
     @Override
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "sql", new StringProperty("The SELECT query to execute"),
+                "sql", new StringProperty("SELECT query to execute"),
                 "parameters", new ArrayProperty(
-                    "Optional query parameters for prepared statement",
+                    "Query parameters for prepared statement",
                     new StringProperty("Parameter value")
                 ),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("sql")
         );
