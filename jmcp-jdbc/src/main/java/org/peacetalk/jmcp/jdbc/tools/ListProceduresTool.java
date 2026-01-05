@@ -31,16 +31,16 @@ public class ListProceduresTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Lists stored procedures and functions in a schema. Use to discover callable routines and their definitions.";
+        return "List stored procedures and functions with parameters and definitions.";
     }
 
     @Override
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "schema", new StringProperty("Optional schema/catalog name to filter procedures"),
+                "schema", new StringProperty("Schema name to filter (optional)"),
                 "includeDetails", new BooleanProperty("Include parameters and definitions (default: true)"),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             )
         );
 

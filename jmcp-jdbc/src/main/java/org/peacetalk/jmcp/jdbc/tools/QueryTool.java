@@ -1,6 +1,7 @@
 package org.peacetalk.jmcp.jdbc.tools;
 
 import org.peacetalk.jmcp.core.schema.ArrayProperty;
+import org.peacetalk.jmcp.core.schema.BooleanProperty;
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
 import org.peacetalk.jmcp.core.schema.StringProperty;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
@@ -33,7 +34,7 @@ public class QueryTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Execute read-only SELECT query. Returns up to " + MAX_ROWS + " rows in compact array format.";
+        return "Execute read-only SELECT query. Returns up to " + MAX_ROWS + " rows. Use validate_only=true to check syntax without executing.";
     }
 
     @Override
@@ -45,6 +46,7 @@ public class QueryTool implements JdbcTool {
                     "Query parameters for prepared statement",
                     new StringProperty("Parameter value")
                 ),
+                "validate_only", new BooleanProperty("If true, validate SQL syntax without executing (default: false)"),
                 "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("sql")
@@ -56,9 +58,9 @@ public class QueryTool implements JdbcTool {
     @Override
     public Object execute(JsonNode params, ConnectionContext context) throws Exception {
         String sql = params.get("sql").asString().trim();
+        boolean validateOnly = params.has("validate_only") && params.get("validate_only").asBoolean();
 
         // Validate SQL is read-only using robust parser
-        // This catches CTEs, subqueries, and all SQL variants correctly
         ReadOnlySqlValidator.validateReadOnly(sql);
 
         List<String> parameters = new ArrayList<>();
@@ -69,19 +71,29 @@ public class QueryTool implements JdbcTool {
         try (Connection conn = context.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
-            stmt.setMaxRows(MAX_ROWS);
-
-            // Set parameters
+            // Set parameters for validation
             for (int i = 0; i < parameters.size(); i++) {
                 stmt.setString(i + 1, parameters.get(i));
             }
+
+            // If validate_only, just return success without executing
+            if (validateOnly) {
+                return new ValidationResult(true, "Query syntax is valid");
+            }
+
+            stmt.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+            stmt.setMaxRows(MAX_ROWS);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 return resultSetToJson(rs);
             }
         }
     }
+
+    /**
+     * Result for validate_only mode
+     */
+    public record ValidationResult(boolean valid, String message) {}
 
     private CompactQueryResult resultSetToJson(ResultSet rs) throws SQLException {
         // Extract column names

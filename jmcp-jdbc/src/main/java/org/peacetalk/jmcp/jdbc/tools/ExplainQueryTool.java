@@ -33,8 +33,8 @@ public class ExplainQueryTool implements JdbcTool {
     public JsonNode getInputSchema() {
         ObjectSchema schema = new ObjectSchema(
             Map.of(
-                "sql", new StringProperty("The SELECT query to explain"),
-                "database_id", new StringProperty("Optional database connection ID. If not provided, uses the default connection.")
+                "sql", new StringProperty("SELECT query to explain"),
+                "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("sql")
         );

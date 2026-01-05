@@ -133,8 +133,14 @@ public class ContextResource implements Resource {
             new ToolInfo(
                 "query",
                 "Execute read-only SELECT query",
-                "Returns up to 1000 rows in compact array format.",
-                List.of("sql", "parameters", "database_id")
+                "Returns up to 1000 rows. Use validate_only=true to check syntax.",
+                List.of("sql", "parameters", "validate_only", "database_id")
+            ),
+            new ToolInfo(
+                "explain-query",
+                "Get query execution plan",
+                "Shows how database will execute the query.",
+                List.of("sql", "database_id")
             ),
             new ToolInfo(
                 "get-row-count",
