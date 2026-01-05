@@ -72,14 +72,10 @@ public class JdbcToolProvider implements ToolProvider {
 
         // Initialize tools with adapters
         tools.clear();
-        tools.add(new ListConnectionsTool(connectionManager));
         tools.add(new JdbcToolAdapter(new QueryTool(), connectionManager));
-        tools.add(new JdbcToolAdapter(new ListTablesTool(), connectionManager));
-        tools.add(new JdbcToolAdapter(new ListSchemasTool(), connectionManager));
-        tools.add(new JdbcToolAdapter(new DescribeTableTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new GetRowCountTool(), connectionManager));
-
-        // Initialize resource provider
+        tools.add(new JdbcToolAdapter(new SampleDataTool(), connectionManager));
+        tools.add(new JdbcToolAdapter(new AnalyzeColumnTool(), connectionManager));
         resourceProvider = new JdbcResourceProvider();
         resourceProvider.setConnectionManager(connectionManager);
         resourceProvider.initialize();

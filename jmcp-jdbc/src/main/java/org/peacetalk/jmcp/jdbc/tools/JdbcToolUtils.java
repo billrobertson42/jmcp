@@ -184,5 +184,22 @@ public final class JdbcToolUtils {
         }
         return names;
     }
+
+    /**
+     * Validate that the column exists in the table.
+     */
+    public static void validateColumnExists(Connection conn, String schemaName, String tableName, String columnName)
+            throws SQLException {
+        boolean columnExists = false;
+
+        try (ResultSet rs = conn.getMetaData().getColumns(null, schemaName, tableName, columnName)) {
+            columnExists = rs.next();
+        }
+
+        if (!columnExists) {
+            throw new SQLException("Column '" + columnName + "' does not exist in table '" + tableName + "'" +
+                (schemaName != null ? " in schema '" + schemaName + "'" : ""));
+        }
+    }
 }
 

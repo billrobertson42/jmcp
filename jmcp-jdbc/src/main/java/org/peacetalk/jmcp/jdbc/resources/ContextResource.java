@@ -134,44 +134,26 @@ public class ContextResource implements Resource {
             new ToolInfo(
                 "query",
                 "Execute a read-only SQL SELECT query",
-                "Use database_id from connections list. Returns tabular data.",
-                List.of("database_id (required)", "sql (required)", "max_rows (optional, default 100)")
-            ),
-            new ToolInfo(
-                "list-tables",
-                "List all tables in a schema",
-                "Returns table names with row counts. Use to discover available tables.",
-                List.of("database_id (required)", "schema (optional, uses default)")
-            ),
-            new ToolInfo(
-                "describe-table",
-                "Get detailed table structure",
-                "Returns columns, types, primary keys, foreign keys, indexes.",
-                List.of("database_id (required)", "table (required)", "schema (optional)")
-            ),
-            new ToolInfo(
-                "list-schemas",
-                "List all schemas in a database",
-                "Returns schema names. Use to discover available schemas.",
-                List.of("database_id (required)")
-            ),
-            new ToolInfo(
-                "list-views",
-                "List all views in a schema",
-                "Returns view names. Views are virtual tables defined by queries.",
-                List.of("database_id (required)", "schema (optional)")
+                "Use database_id from connections list. Returns tabular data in compact format.",
+                List.of("sql (required)", "database_id (optional)", "parameters (optional)")
             ),
             new ToolInfo(
                 "get-row-count",
-                "Get the number of rows in a table",
-                "Fast count of table rows.",
-                List.of("database_id (required)", "table (required)", "schema (optional)")
+                "Get exact row count for a table",
+                "Fast exact count of table rows. For approximate counts, use get-table-statistics.",
+                List.of("table (required)", "schema (optional)", "database_id (optional)")
             ),
             new ToolInfo(
-                "explain-query",
-                "Get the execution plan for a SQL query",
-                "Shows how the database will execute a query. Useful for optimization.",
-                List.of("database_id (required)", "sql (required)")
+                "sample-data",
+                "Get sample data from a table",
+                "Smart sampling strategies: 'first', 'random', 'last'. Returns actual data values for preview.",
+                List.of("table (required)", "schema (optional)", "sample_size (optional, max 100)", "strategy (optional)", "columns (optional)", "database_id (optional)")
+            ),
+            new ToolInfo(
+                "analyze-column",
+                "Analyze column distribution and statistics",
+                "Returns distinct count, null count, min/max, most common values. Use for data profiling.",
+                List.of("table (required)", "column (required)", "schema (optional)", "top_values (optional, max 50)", "database_id (optional)")
             )
         );
     }
@@ -241,12 +223,16 @@ public class ContextResource implements Resource {
 
     private List<String> getUsageHints() {
         return List.of(
-            "Use database_id (not connection name) when calling tools",
-            "If schema is not specified, the database's default schema is used",
+            "Start with db://context to see available connections and resources",
+            "Use resources (not tools) to explore database structure - they're cacheable and provide navigation",
+            "Resources provide: connections list, schemas, tables, views, relationships, and complete metadata",
+            "Tools are for operations: query execution, row counts, statistics, data sampling, and analysis",
+            "Navigate resources via URIs: db://connections → db://connection/{id}/schemas → db://connection/{id}/schema/{name}",
+            "Table structure and relationships: db://connection/{id}/schema/{schema}/table/{table}",
             "The query tool only allows SELECT statements for safety",
-            "Use describe-table to understand table structure before writing queries",
-            "Foreign keys in describe-table output show relationships between tables",
-            "Resources provide cacheable metadata; tools perform operations"
+            "If schema is not specified in tools, the database's default schema is used",
+            "Use sample-data tool to preview actual data values",
+            "Use analyze-column tool for data profiling and quality assessment"
         );
     }
 
