@@ -43,7 +43,7 @@ public class SchemaResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Schema with lists of tables and views, including navigation URIs.";
+        return "Schema with lists of tables, views, and procedures, including navigation URIs.";
     }
 
     @Override
@@ -57,6 +57,7 @@ public class SchemaResource implements Resource {
 
         List<TableLink> tables = new ArrayList<>();
         List<ViewLink> views = new ArrayList<>();
+        List<ProcedureLink> procedures = new ArrayList<>();
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -82,6 +83,24 @@ public class SchemaResource implements Resource {
                     ));
                 }
             }
+
+            // Get procedures
+            try (ResultSet rs = metaData.getProcedures(null, schemaName, "%")) {
+                while (rs.next()) {
+                    String procName = rs.getString("PROCEDURE_NAME");
+                    short procType = rs.getShort("PROCEDURE_TYPE");
+                    String type = switch (procType) {
+                        case DatabaseMetaData.procedureReturnsResult -> "FUNCTION";
+                        case DatabaseMetaData.procedureNoResult -> "PROCEDURE";
+                        default -> "UNKNOWN";
+                    };
+                    procedures.add(new ProcedureLink(
+                        procName,
+                        type,
+                        procedureUri(connectionId, schemaName, procName)
+                    ));
+                }
+            }
         }
 
         SchemaResponse response = new SchemaResponse(
@@ -89,6 +108,7 @@ public class SchemaResource implements Resource {
             connectionId,
             tables,
             views,
+            procedures,
             new NavigationLinks(
                 connectionSchemasUri(connectionId),
                 schemaRelationshipsUri(connectionId, schemaName)
@@ -106,6 +126,7 @@ public class SchemaResource implements Resource {
         String connectionId,
         List<TableLink> tables,
         List<ViewLink> views,
+        List<ProcedureLink> procedures,
         NavigationLinks links
     ) {}
 
@@ -122,6 +143,15 @@ public class SchemaResource implements Resource {
      */
     public record ViewLink(
         String name,
+        String uri
+    ) {}
+
+    /**
+     * Procedure link with name, type, and URI
+     */
+    public record ProcedureLink(
+        String name,
+        String type,
         String uri
     ) {}
 

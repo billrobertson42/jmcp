@@ -78,7 +78,6 @@ public class TablesListResource implements Resource {
 
         TablesResponse response = new TablesResponse(
             tables,
-            tables.size(),
             new NavigationLinks(
                 schemaUri(connectionId, schemaName)
             )
@@ -92,7 +91,6 @@ public class TablesListResource implements Resource {
      */
     public record TablesResponse(
         List<TableEntry> tables,
-        int count,
         NavigationLinks links
     ) {}
 

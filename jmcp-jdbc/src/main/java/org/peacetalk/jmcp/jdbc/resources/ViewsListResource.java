@@ -78,7 +78,6 @@ public class ViewsListResource implements Resource {
 
         ViewsResponse response = new ViewsResponse(
             views,
-            views.size(),
             new NavigationLinks(
                 schemaUri(connectionId, schemaName)
             )
@@ -92,7 +91,6 @@ public class ViewsListResource implements Resource {
      */
     public record ViewsResponse(
         List<ViewEntry> views,
-        int count,
         NavigationLinks links
     ) {}
 

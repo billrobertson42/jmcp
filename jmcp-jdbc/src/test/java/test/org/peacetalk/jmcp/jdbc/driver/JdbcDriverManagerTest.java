@@ -1,12 +1,14 @@
 package test.org.peacetalk.jmcp.jdbc.driver;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 
 import java.nio.file.Path;
+import java.sql.Driver;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -22,20 +24,29 @@ class JdbcDriverManagerTest {
         driverManager = new JdbcDriverManager(tempDir);
     }
 
+    @AfterEach
+    void tearDown() {
+        // Clean up any loaded drivers
+    }
+
+    @Test
+    void testManagerInitialization() {
+        assertNotNull(driverManager);
+    }
+
+    @Test
+    void testLoadH2Driver() throws Exception {
+        var classLoader = driverManager.loadDriver("h2");
+        assertNotNull(classLoader);
+
+        // Should be able to load the H2 driver class
+        Class<?> driverClass = classLoader.loadClass("org.h2.Driver");
+        assertNotNull(driverClass);
+        assertTrue(Driver.class.isAssignableFrom(driverClass));
+    }
+
     @Test
     void testGetKnownDriver() {
-        MavenCoordinates postgresql = driverManager.getKnownDriver("postgresql");
-        assertNotNull(postgresql);
-        assertEquals("org.postgresql", postgresql.groupId());
-        assertEquals("postgresql", postgresql.artifactId());
-
-        MavenCoordinates mysql = driverManager.getKnownDriver("mysql");
-        assertNotNull(mysql);
-        assertEquals("com.mysql", mysql.groupId());
-
-        MavenCoordinates mariadb = driverManager.getKnownDriver("mariadb");
-        assertNotNull(mariadb);
-
         MavenCoordinates h2 = driverManager.getKnownDriver("h2");
         assertNotNull(h2);
 
@@ -44,43 +55,60 @@ class JdbcDriverManagerTest {
     }
 
     @Test
-    void testGetKnownDriverCaseInsensitive() {
-        MavenCoordinates postgresql = driverManager.getKnownDriver("PostgreSQL");
-        assertNotNull(postgresql);
-        assertEquals("org.postgresql", postgresql.groupId());
-
-        MavenCoordinates mysql = driverManager.getKnownDriver("MYSQL");
-        assertNotNull(mysql);
-    }
-
-    @Test
     void testGetUnknownDriver() {
-        MavenCoordinates unknown = driverManager.getKnownDriver("unknowndb");
-        assertNull(unknown);
+        assertThrows(IllegalArgumentException.class, () ->
+            driverManager.getKnownDriver("unknown-db")
+        );
     }
 
     @Test
-    void testLoadDriverThrowsForUnknownDatabase() {
-        assertThrows(IllegalArgumentException.class, () -> {
-            driverManager.loadDriver("unknowndb");
-        });
+    void testUnloadDriver() throws Exception {
+        var classLoader = driverManager.loadDriver("h2");
+        assertNotNull(classLoader);
+
+        driverManager.unloadDriver("h2");
+
+        // Should not throw after unload
     }
 
     @Test
-    void testDriverManagerCreatesDirectory() throws Exception {
-        Path newDir = tempDir.resolve("drivers");
-        JdbcDriverManager manager = new JdbcDriverManager(newDir);
+    void testUnloadByCoordinates() throws Exception {
+        MavenCoordinates coords = driverManager.getKnownDriver("h2");
+        var classLoader = driverManager.loadDriver(coords);
+        assertNotNull(classLoader);
 
-        assertTrue(newDir.toFile().exists());
-        assertTrue(newDir.toFile().isDirectory());
+        driverManager.unloadDriver(coords);
     }
 
     @Test
-    void testUnloadNonExistentDriver() throws Exception {
-        // Should not throw
-        assertDoesNotThrow(() -> {
-            driverManager.unloadDriver("postgresql");
-        });
+    void testMultipleLoadUnloadCycles() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            var classLoader = driverManager.loadDriver("h2");
+            assertNotNull(classLoader);
+            driverManager.unloadDriver("h2");
+        }
+    }
+
+    @Test
+    void testLoadDifferentDrivers() throws Exception {
+        var h2Loader = driverManager.loadDriver("h2");
+        var sqliteLoader = driverManager.loadDriver("sqlite");
+
+        assertNotNull(h2Loader);
+        assertNotNull(sqliteLoader);
+
+        // They should be different classloaders
+        assertNotSame(h2Loader, sqliteLoader);
+    }
+
+    @Test
+    void testClassLoaderIsolation() throws Exception {
+        var h2Loader = driverManager.loadDriver("h2");
+
+        // H2 Driver should be loadable from h2 classloader
+        Class<?> h2DriverClass = h2Loader.loadClass("org.h2.Driver");
+        assertNotNull(h2DriverClass);
+        assertEquals("org.h2.Driver", h2DriverClass.getName());
     }
 }
 

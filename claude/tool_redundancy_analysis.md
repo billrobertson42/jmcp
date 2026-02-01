@@ -241,14 +241,15 @@ Result: { connections: [{"id": "prod", "type": "postgresql", ...}] }
 
 ## Summary of Recommendations
 
-### Remove Immediately (Clear Redundancy)
+### ✅ Removed (Clear Redundancy)
 
-| Tool | Reason | Replacement |
-|------|--------|-------------|
-| ❌ **list-tables** | SchemaResource includes tables | `db://connection/{id}/schema/{schema}` |
-| ❌ **list-schemas** | SchemasListResource exists | `db://connection/{id}/schemas` |
+| Tool | Reason | Replacement | Status |
+|------|--------|-------------|--------|
+| ❌ **list-tables** | SchemaResource includes tables | `db://connection/{id}/schema/{schema}` | ✅ REMOVED |
+| ❌ **list-schemas** | SchemasListResource exists | `db://connection/{id}/schemas` | ✅ REMOVED |
+| ❌ **list-procedures** | SchemaResource includes procedures | `db://connection/{id}/schema/{schema}` | ✅ REMOVED |
 
-**Lines of Code to Remove:** ~200-300 lines + tests
+**Lines of Code Removed:** ~500-600 lines + tests
 
 ---
 

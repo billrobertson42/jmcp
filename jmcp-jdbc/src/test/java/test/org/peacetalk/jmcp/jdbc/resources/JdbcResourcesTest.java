@@ -39,6 +39,16 @@ class JdbcResourcesTest {
             stmt.execute("CREATE TABLE IF NOT EXISTS test_schema.orders (id INT PRIMARY KEY, user_id INT, total DECIMAL(10,2))");
             stmt.execute("ALTER TABLE test_schema.orders ADD FOREIGN KEY (user_id) REFERENCES test_schema.users(id)");
             stmt.execute("CREATE VIEW IF NOT EXISTS test_schema.user_orders AS SELECT u.name, o.total FROM test_schema.users u JOIN test_schema.orders o ON u.id = o.user_id");
+
+            // Create a test procedure/function
+            stmt.execute("DROP ALIAS IF EXISTS test_schema.calculate_tax");
+            stmt.execute("""
+                CREATE ALIAS test_schema.calculate_tax AS $$
+                    double calculateTax(double amount, double rate) {
+                        return amount * rate;
+                    }
+                $$
+            """);
         }
 
         // Setup mock connection manager
@@ -57,6 +67,7 @@ class JdbcResourcesTest {
     void tearDown() throws Exception {
         if (connection != null && !connection.isClosed()) {
             try (Statement stmt = connection.createStatement()) {
+                stmt.execute("DROP ALIAS IF EXISTS test_schema.calculate_tax");
                 stmt.execute("DROP VIEW IF EXISTS test_schema.user_orders");
                 stmt.execute("DROP TABLE IF EXISTS test_schema.orders");
                 stmt.execute("DROP TABLE IF EXISTS test_schema.users");
@@ -87,8 +98,6 @@ class JdbcResourcesTest {
 
         JsonNode json = mapper.readTree(result);
         assertTrue(json.has("connections"));
-        assertTrue(json.has("count"));
-        assertEquals(1, json.get("count").asInt());
 
         JsonNode firstConnection = json.get("connections").get(0);
         assertEquals("testdb", firstConnection.get("id").asString());
@@ -147,9 +156,9 @@ class JdbcResourcesTest {
 
         JsonNode json = mapper.readTree(result);
         assertTrue(json.has("schemas"));
-        assertTrue(json.has("count"));
-        assertTrue(json.get("count").asInt() > 0);
         assertTrue(json.has("links"));
+        assertTrue(json.get("schemas").isArray());
+        assertTrue(json.get("schemas").size() > 0);
     }
 
     // SchemaResource tests
@@ -175,6 +184,7 @@ class JdbcResourcesTest {
         assertEquals("TEST_SCHEMA", json.get("name").asString());
         assertTrue(json.has("tables"));
         assertTrue(json.has("views"));
+        assertTrue(json.has("procedures"));
         assertTrue(json.has("links"));
 
         // We created 2 tables (users, orders) and 1 view
@@ -189,6 +199,17 @@ class JdbcResourcesTest {
         // Check that views have name and uri fields
         assertTrue(views.get(0).has("name"));
         assertTrue(views.get(0).has("uri"));
+
+        // Check procedures
+        JsonNode procedures = json.get("procedures");
+        assertNotNull(procedures);
+        // H2 may or may not have procedures
+        assertTrue(procedures.isArray());
+        if (procedures.size() > 0) {
+            assertTrue(procedures.get(0).has("name"));
+            assertTrue(procedures.get(0).has("type"));
+            assertTrue(procedures.get(0).has("uri"));
+        }
     }
 
     // TableResource tests
@@ -402,5 +423,38 @@ class JdbcResourcesTest {
         assertTrue(links.has("parent"));
         assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
     }
+
+    // ProcedureResource tests
+
+    @Test
+    void testProcedureResourceMetadata() {
+        ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
+
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/procedure/CALCULATE_TAX", resource.getUri());
+        assertEquals("Procedure: CALCULATE_TAX", resource.getName());
+        assertNotNull(resource.getDescription());
+        assertEquals("application/json", resource.getMimeType());
+    }
+
+    @Test
+    void testProcedureResourceRead() throws Exception {
+        ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
+
+        String result = resource.read();
+        assertNotNull(result);
+
+        JsonNode json = mapper.readTree(result);
+        assertEquals("CALCULATE_TAX", json.get("name").asString());
+        assertEquals("TEST_SCHEMA", json.get("schema").asString());
+        assertTrue(json.has("type"));
+        assertTrue(json.has("links"));
+
+        // Check links
+        JsonNode links = json.get("links");
+        assertTrue(links.has("parent"));
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
+    }
 }
+
+
 

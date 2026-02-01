@@ -46,8 +46,16 @@ public final class JdbcToolUtils {
         DatabaseMetaData metaData = connection.getMetaData();
         boolean tableExists = false;
 
+        // Try exact match first
         try (ResultSet rs = metaData.getTables(null, schemaName, tableName, new String[]{"TABLE", "VIEW"})) {
             tableExists = rs.next();
+        }
+
+        // If not found and database stores identifiers in uppercase (like H2), try uppercase
+        if (!tableExists && !tableName.equals(tableName.toUpperCase())) {
+            try (ResultSet rs = metaData.getTables(null, schemaName, tableName.toUpperCase(), new String[]{"TABLE", "VIEW"})) {
+                tableExists = rs.next();
+            }
         }
 
         if (!tableExists) {
@@ -186,20 +194,37 @@ public final class JdbcToolUtils {
     }
 
     /**
-     * Validate that the column exists in the table.
+     * Validate that the column exists in the table and return the actual column name as stored in the database.
+     * This handles case normalization for databases like H2 that store identifiers in uppercase.
+     *
+     * @return The actual column name as stored in the database
      */
-    public static void validateColumnExists(Connection conn, String schemaName, String tableName, String columnName)
+    public static String validateColumnExists(Connection conn, String schemaName, String tableName, String columnName)
             throws SQLException {
-        boolean columnExists = false;
+        String actualColumnName = null;
 
+        // Try exact match first
         try (ResultSet rs = conn.getMetaData().getColumns(null, schemaName, tableName, columnName)) {
-            columnExists = rs.next();
+            if (rs.next()) {
+                actualColumnName = rs.getString("COLUMN_NAME");
+            }
         }
 
-        if (!columnExists) {
+        // If not found, try with uppercase table and column names (for H2)
+        if (actualColumnName == null && (!tableName.equals(tableName.toUpperCase()) || !columnName.equals(columnName.toUpperCase()))) {
+            try (ResultSet rs = conn.getMetaData().getColumns(null, schemaName, tableName.toUpperCase(), columnName.toUpperCase())) {
+                if (rs.next()) {
+                    actualColumnName = rs.getString("COLUMN_NAME");
+                }
+            }
+        }
+
+        if (actualColumnName == null) {
             throw new SQLException("Column '" + columnName + "' does not exist in table '" + tableName + "'" +
                 (schemaName != null ? " in schema '" + schemaName + "'" : ""));
         }
+
+        return actualColumnName;
     }
 }
 

@@ -134,14 +134,14 @@ public class SampleDataTool implements JdbcTool {
         for (int i = 0; i < columnNames.length; i++) {
             String columnName = columnNames[i].trim();
 
-            // Validate column exists in table to prevent SQL injection
-            JdbcToolUtils.validateColumnExists(conn, schemaName, tableName, columnName);
+            // Validate column exists and get the actual column name as stored in the database
+            String actualColumnName = JdbcToolUtils.validateColumnExists(conn, schemaName, tableName, columnName);
 
             if (i > 0) {
                 validatedColumns.append(", ");
             }
-            // Use quoted identifier for safety
-            validatedColumns.append("\"").append(columnName).append("\"");
+            // Use the actual column name directly (no quoting needed for standard identifiers)
+            validatedColumns.append(actualColumnName);
         }
 
         return validatedColumns.toString();

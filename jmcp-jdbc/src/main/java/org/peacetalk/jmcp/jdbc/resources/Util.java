@@ -55,6 +55,11 @@ public class Util {
         return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/view/" + viewName;
     }
 
+    // Procedure level URIs
+    public static String procedureUri(String connectionId, String schemaName, String procedureName) {
+        return SCHEME + "://connection/" + connectionId + "/schema/" + schemaName + "/procedure/" + procedureName;
+    }
+
     // Helper for URI prefix checking
     public static String schemePrefix() {
         return SCHEME + "://";

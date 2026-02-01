@@ -74,21 +74,21 @@ public class AnalyzeColumnTool implements JdbcTool {
             // Validate table exists
             JdbcToolUtils.validateTableExists(conn, schemaName, tableName);
 
-            // Validate column exists
-            JdbcToolUtils.validateColumnExists(conn, schemaName, tableName, columnName);
+            // Validate column exists and get the actual column name as stored in the database
+            String actualColumnName = JdbcToolUtils.validateColumnExists(conn, schemaName, tableName, columnName);
 
             String qualifiedTable = JdbcToolUtils.buildQualifiedTableName(schemaName, tableName);
 
-            // Get basic statistics
-            ColumnStats stats = getBasicStats(conn, qualifiedTable, columnName);
+            // Get basic statistics using the actual column name
+            ColumnStats stats = getBasicStats(conn, qualifiedTable, actualColumnName);
 
-            // Get top values with frequencies
-            List<ValueFrequency> topValues = getTopValues(conn, qualifiedTable, columnName, topValuesCount);
+            // Get top values with frequencies using the actual column name
+            List<ValueFrequency> topValues = getTopValues(conn, qualifiedTable, actualColumnName, topValuesCount);
 
             return new ColumnAnalysis(
                 tableName,
                 schemaName,
-                columnName,
+                columnName,  // Return the original column name as requested
                 stats.totalRows(),
                 stats.distinctCount(),
                 stats.nullCount(),
@@ -105,10 +105,10 @@ public class AnalyzeColumnTool implements JdbcTool {
     private ColumnStats getBasicStats(Connection conn, String qualifiedTable, String columnName) throws SQLException {
         String sql = "SELECT " +
                     "COUNT(*) as total_rows, " +
-                    "COUNT(DISTINCT " + escapeIdentifier(columnName) + ") as distinct_count, " +
-                    "COUNT(*) - COUNT(" + escapeIdentifier(columnName) + ") as null_count, " +
-                    "MIN(" + escapeIdentifier(columnName) + ") as min_value, " +
-                    "MAX(" + escapeIdentifier(columnName) + ") as max_value " +
+                    "COUNT(DISTINCT " + columnName + ") as distinct_count, " +
+                    "COUNT(*) - COUNT(" + columnName + ") as null_count, " +
+                    "MIN(" + columnName + ") as min_value, " +
+                    "MAX(" + columnName + ") as max_value " +
                     "FROM " + qualifiedTable;
 
         try (PreparedStatement stmt = conn.prepareStatement(sql);
@@ -133,10 +133,11 @@ public class AnalyzeColumnTool implements JdbcTool {
      */
     private List<ValueFrequency> getTopValues(Connection conn, String qualifiedTable, String columnName, int limit)
             throws SQLException {
-        String sql = "SELECT " + escapeIdentifier(columnName) + " as value, COUNT(*) as frequency " +
+        // Note: "value" is quoted because it's a reserved word in H2
+        String sql = "SELECT " + columnName + " as \"value\", COUNT(*) as frequency " +
                     "FROM " + qualifiedTable + " " +
-                    "WHERE " + escapeIdentifier(columnName) + " IS NOT NULL " +
-                    "GROUP BY " + escapeIdentifier(columnName) + " " +
+                    "WHERE " + columnName + " IS NOT NULL " +
+                    "GROUP BY " + columnName + " " +
                     "ORDER BY frequency DESC " +
                     "LIMIT " + limit;
 

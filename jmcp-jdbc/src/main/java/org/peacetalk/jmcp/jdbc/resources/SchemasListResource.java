@@ -77,7 +77,6 @@ public class SchemasListResource implements Resource {
 
         SchemasResponse response = new SchemasResponse(
             schemas,
-            schemas.size(),
             new NavigationLinks(
                 connectionUri(connectionId)
             )
@@ -91,7 +90,6 @@ public class SchemasListResource implements Resource {
      */
     public record SchemasResponse(
         List<SchemaEntry> schemas,
-        int count,
         NavigationLinks links
     ) {}
 

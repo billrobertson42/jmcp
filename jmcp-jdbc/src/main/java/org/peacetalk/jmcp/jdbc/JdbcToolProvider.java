@@ -117,6 +117,17 @@ public class JdbcToolProvider implements ToolProvider {
      * Load JDBC configuration from file or environment variable
      */
     private static JdbcConfiguration loadConfiguration() throws IOException {
+        // Try system property first (for testing)
+        String configProperty = System.getProperty("jdbc.mcp.config");
+        if (configProperty != null) {
+            Path configPath = Paths.get(configProperty);
+            if (Files.exists(configPath)) {
+                System.err.println("Loading configuration from system property: " + configPath);
+                JsonNode configNode = MAPPER.readTree(configPath.toFile());
+                return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
+            }
+        }
+
         // Try to load from config file
         Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
 

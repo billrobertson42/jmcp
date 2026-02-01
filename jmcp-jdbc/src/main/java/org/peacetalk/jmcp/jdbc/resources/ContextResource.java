@@ -71,11 +71,13 @@ public class ContextResource implements Resource {
                         String schemaName = rs.getString("TABLE_SCHEM");
                         if (schemaName == null) continue;
 
-                        // Count tables and views for this schema
+                        // Count tables, views, and procedures for this schema
                         int tableCount = 0;
                         int viewCount = 0;
+                        int procedureCount = 0;
                         List<String> tableNames = new ArrayList<>();
                         List<String> viewNames = new ArrayList<>();
+                        List<String> procedureNames = new ArrayList<>();
 
                         try (ResultSet tables = metaData.getTables(null, schemaName, "%", new String[]{"TABLE"})) {
                             while (tables.next()) {
@@ -95,14 +97,25 @@ public class ContextResource implements Resource {
                             }
                         }
 
+                        try (ResultSet procs = metaData.getProcedures(null, schemaName, "%")) {
+                            while (procs.next()) {
+                                procedureCount++;
+                                if (procedureCount <= 10) { // Limit to first 10 procedure names
+                                    procedureNames.add(procs.getString("PROCEDURE_NAME"));
+                                }
+                            }
+                        }
+
                         boolean isDefault = schemaName.equals(defaultSchema);
                         schemas.add(new SchemaSummary(
                             schemaName,
                             isDefault,
                             tableCount,
                             viewCount,
+                            procedureCount,
                             tableNames,
                             viewNames,
+                            procedureNames,
                             schemaUri(info.id(), schemaName)
                         ));
                     }
@@ -188,7 +201,7 @@ public class ContextResource implements Resource {
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}",
                 "Schema details",
-                "Schema with lists of all tables and views (includes URIs for direct navigation)"
+                "Schema with lists of all tables, views, and procedures (includes URIs for direct navigation)"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/relationships",
@@ -204,6 +217,11 @@ public class ContextResource implements Resource {
                 "db://connection/{database_id}/schema/{schema_name}/view/{view_name}",
                 "View definition",
                 "View structure and SQL definition"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/procedure/{procedure_name}",
+                "Procedure/Function details",
+                "Parameters, return type, definition, language, determinism"
             )
         );
 
@@ -275,15 +293,17 @@ public class ContextResource implements Resource {
     ) {}
 
     /**
-     * Summary of a schema with table/view counts and names
+     * Summary of a schema with table/view/procedure counts and names
      */
     public record SchemaSummary(
         String name,
         boolean isDefault,
         int tableCount,
         int viewCount,
+        int procedureCount,
         List<String> tables,
         List<String> views,
+        List<String> procedures,
         String uri
     ) {}
 

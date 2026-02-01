@@ -63,8 +63,7 @@ public class ConnectionsListResource implements Resource {
         }
 
         ConnectionsResponse response = new ConnectionsResponse(
-            connections,
-            connections.size()
+            connections
         );
 
         return MAPPER.writeValueAsString(response);
@@ -74,8 +73,7 @@ public class ConnectionsListResource implements Resource {
      * Response record for serialization
      */
     public record ConnectionsResponse(
-        List<ConnectionEntry> connections,
-        int count
+        List<ConnectionEntry> connections
     ) {}
 
     /**

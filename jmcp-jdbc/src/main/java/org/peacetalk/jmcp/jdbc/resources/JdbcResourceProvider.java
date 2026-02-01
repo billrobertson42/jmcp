@@ -175,6 +175,7 @@ public class JdbcResourceProvider implements ResourceProvider {
         return switch (objectType) {
             case "table" -> new TableResource(connectionId, schemaName, objectName, connectionManager);
             case "view" -> new ViewResource(connectionId, schemaName, objectName, connectionManager, Util.MAPPER);
+            case "procedure" -> new ProcedureResource(connectionId, schemaName, objectName, connectionManager);
             default -> null;
         };
     }

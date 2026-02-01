@@ -43,7 +43,11 @@ public class JdbcDriverManager {
      * Get known driver coordinates by database type
      */
     public MavenCoordinates getKnownDriver(String databaseType) {
-        return KNOWN_DRIVERS.get(databaseType.toLowerCase());
+        MavenCoordinates coordinates = KNOWN_DRIVERS.get(databaseType.toLowerCase());
+        if (coordinates == null) {
+            throw new IllegalArgumentException("Unknown database type: " + databaseType);
+        }
+        return coordinates;
     }
 
     /**
@@ -51,9 +55,6 @@ public class JdbcDriverManager {
      */
     public DriverClassLoader loadDriver(String databaseType) throws Exception {
         MavenCoordinates coordinates = getKnownDriver(databaseType);
-        if (coordinates == null) {
-            throw new IllegalArgumentException("Unknown database type: " + databaseType);
-        }
         return loadDriver(coordinates);
     }
 
