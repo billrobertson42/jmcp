@@ -8,7 +8,12 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -51,7 +56,7 @@ public class SchemaRelationshipsResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Foreign key relationships involving this schema (including cross-schema FKs).";
+        return "FK relationships involving this schema with copyOrder for dependency-safe operations.";
     }
 
     @Override
@@ -64,6 +69,10 @@ public class SchemaRelationshipsResource implements Resource {
         ConnectionContext context = connectionManager.getContext(connectionId);
         List<Relationship> relationships = new ArrayList<>();
 
+        // For topological sort
+        Set<String> allTables = new LinkedHashSet<>();
+        Map<String, Set<String>> dependencyGraph = new HashMap<>();
+
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
 
@@ -71,12 +80,18 @@ public class SchemaRelationshipsResource implements Resource {
             List<String> tables = new ArrayList<>();
             try (ResultSet rs = metaData.getTables(null, schemaName, "%", new String[]{"TABLE"})) {
                 while (rs.next()) {
-                    tables.add(rs.getString("TABLE_NAME"));
+                    String tableName = rs.getString("TABLE_NAME");
+                    tables.add(tableName);
+                    String qualifiedName = schemaName + "." + tableName;
+                    allTables.add(qualifiedName);
+                    dependencyGraph.putIfAbsent(qualifiedName, new HashSet<>());
                 }
             }
 
             // For each table in this schema, get its imported keys (FK FROM this table)
             for (String table : tables) {
+                String fromQualified = schemaName + "." + table;
+
                 try (ResultSet fkRs = metaData.getImportedKeys(null, schemaName, table)) {
                     String currentFkName = null;
                     List<ColumnMapping> currentMappings = new ArrayList<>();
@@ -91,6 +106,12 @@ public class SchemaRelationshipsResource implements Resource {
                         String pkColumn = fkRs.getString("PKCOLUMN_NAME");
 
                         if (fkName == null) continue;
+
+                        // Track dependency for topological sort (only for tables in this schema)
+                        if (schemaName.equals(pkSchema)) {
+                            String toQualified = pkSchema + "." + pkTable;
+                            dependencyGraph.computeIfAbsent(fromQualified, k -> new HashSet<>()).add(toQualified);
+                        }
 
                         if (!fkName.equals(currentFkName)) {
                             if (currentFkName != null) {
@@ -185,10 +206,15 @@ public class SchemaRelationshipsResource implements Resource {
             }
         }
 
+        // Compute topological sort for copy order (only for tables in this schema)
+        TopologicalSortResult sortResult = TopologicalSort.sort(allTables, dependencyGraph);
+
         SchemaRelationshipsResponse response = new SchemaRelationshipsResponse(
             connectionId,
             schemaName,
             relationships,
+            sortResult.sortedTables(),
+            sortResult.cycles(),
             new NavigationLinks(
                 schemaUri(connectionId, schemaName)
             )
@@ -204,6 +230,8 @@ public class SchemaRelationshipsResource implements Resource {
         String connectionId,
         String schema,
         List<Relationship> relationships,
+        List<String> copyOrder,
+        List<String> cyclesDetected,
         NavigationLinks links
     ) {}
 

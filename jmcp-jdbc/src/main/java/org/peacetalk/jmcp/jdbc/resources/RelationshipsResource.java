@@ -8,7 +8,12 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -42,7 +47,7 @@ public class RelationshipsResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Complete foreign key relationship graph for all schemas.";
+        return "FK relationship graph with copyOrder (topological sort for dependency-safe data operations).";
     }
 
     @Override
@@ -54,6 +59,10 @@ public class RelationshipsResource implements Resource {
     public String read() throws Exception {
         ConnectionContext context = connectionManager.getContext(connectionId);
         List<Relationship> relationships = new ArrayList<>();
+
+        // For topological sort: map of "schema.table" -> dependencies
+        Map<String, Set<String>> dependencyGraph = new HashMap<>();
+        Set<String> allTables = new LinkedHashSet<>();
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -71,11 +80,17 @@ public class RelationshipsResource implements Resource {
                 try (ResultSet rs = metaData.getTables(null, schema, "%", new String[]{"TABLE"})) {
                     List<String> tables = new ArrayList<>();
                     while (rs.next()) {
-                        tables.add(rs.getString("TABLE_NAME"));
+                        String tableName = rs.getString("TABLE_NAME");
+                        tables.add(tableName);
+                        String qualifiedName = schema + "." + tableName;
+                        allTables.add(qualifiedName);
+                        dependencyGraph.putIfAbsent(qualifiedName, new HashSet<>());
                     }
 
                     // For each table, get its foreign keys
                     for (String table : tables) {
+                        String fromQualified = schema + "." + table;
+
                         try (ResultSet fkRs = metaData.getImportedKeys(null, schema, table)) {
                             String currentFkName = null;
                             List<ColumnMapping> currentMappings = new ArrayList<>();
@@ -90,6 +105,10 @@ public class RelationshipsResource implements Resource {
                                 String pkColumn = fkRs.getString("PKCOLUMN_NAME");
 
                                 if (fkName == null) continue;
+
+                                // Track dependency for topological sort
+                                String toQualified = pkSchema + "." + pkTable;
+                                dependencyGraph.computeIfAbsent(fromQualified, k -> new HashSet<>()).add(toQualified);
 
                                 if (!fkName.equals(currentFkName)) {
                                     if (currentFkName != null) {
@@ -130,9 +149,14 @@ public class RelationshipsResource implements Resource {
             }
         }
 
+        // Compute topological sort for copy order
+        TopologicalSortResult sortResult = TopologicalSort.sort(allTables, dependencyGraph);
+
         RelationshipsResponse response = new RelationshipsResponse(
             connectionId,
             relationships,
+            sortResult.sortedTables(),
+            sortResult.cycles(),
             new NavigationLinks(
                 connectionUri(connectionId)
             )
@@ -147,6 +171,8 @@ public class RelationshipsResource implements Resource {
     public record RelationshipsResponse(
         String connectionId,
         List<Relationship> relationships,
+        List<String> copyOrder,
+        List<String> cyclesDetected,
         NavigationLinks links
     ) {}
 

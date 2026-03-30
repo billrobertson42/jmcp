@@ -7,6 +7,7 @@ import org.peacetalk.jmcp.core.protocol.McpServer;
 import org.peacetalk.jmcp.core.protocol.ResourcesHandler;
 import org.peacetalk.jmcp.core.protocol.ToolsHandler;
 import org.peacetalk.jmcp.jdbc.JdbcToolProvider;
+import org.peacetalk.jmcp.server.tools.ServerToolProvider;
 import org.peacetalk.jmcp.transport.stdio.StdioTransport;
 
 /**
@@ -35,7 +36,6 @@ public class Main {
             // Register tools handler with the tool provider
             ToolsHandler toolsHandler = new ToolsHandler();
             toolsHandler.registerToolProvider(toolProvider);
-            mcpServer.registerHandler(toolsHandler);
 
             // Register resources handler with the resource provider
             ResourceProvider resourceProvider = toolProvider.getResourceProvider();
@@ -44,7 +44,14 @@ public class Main {
                 resourcesHandler.registerResourceProvider(resourceProvider);
                 mcpServer.registerHandler(resourcesHandler);
                 System.err.println("Registered resource provider: " + resourceProvider.getName());
+
+                // Register server tools (including resource proxy for clients that don't support resources)
+                ServerToolProvider serverToolProvider = new ServerToolProvider(resourcesHandler);
+                toolsHandler.registerToolProvider(serverToolProvider);
+                System.err.println("Registered resource proxy tool for resource-unaware clients");
             }
+
+            mcpServer.registerHandler(toolsHandler);
 
             // Start stdio transport
             transport = new StdioTransport();

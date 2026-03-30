@@ -158,19 +158,19 @@ public class ContextResource implements Resource {
             new ToolInfo(
                 "get-row-count",
                 "Get exact row count for a table",
-                "Returns exact number of rows.",
+                "Returns exact total row count. For filtered counts, use query tool with SELECT COUNT(*).",
                 List.of("table", "schema", "database_id")
             ),
             new ToolInfo(
                 "sample-data",
                 "Get sample rows from a table",
-                "Strategies: 'first', 'random', 'last'. Max 100 rows.",
+                "Preview actual data values. Strategies: 'first', 'random', 'last'. Max 100 rows.",
                 List.of("table", "schema", "sample_size", "strategy", "columns", "database_id")
             ),
             new ToolInfo(
                 "analyze-column",
                 "Analyze column data distribution",
-                "Returns distinct count, nulls, min/max, top values.",
+                "Data profiling: distinct count, nulls, min/max, top values with frequencies.",
                 List.of("table", "column", "schema", "top_values", "database_id")
             )
         );
@@ -181,17 +181,17 @@ public class ContextResource implements Resource {
             new ResourceTemplate(
                 "db://connections",
                 "List of all database connections",
-                "Root resource listing all available connections"
+                "Root resource listing all available connections with navigation URIs"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}",
                 "Connection details",
-                "Database metadata and navigation links"
+                "Database metadata with links to schemas and relationships"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/relationships",
                 "Complete FK relationship graph",
-                "All foreign key relationships across all schemas in the database"
+                "All FK relationships with topological copy order for dependency-safe data operations"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schemas",
@@ -201,27 +201,27 @@ public class ContextResource implements Resource {
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}",
                 "Schema details",
-                "Schema with lists of all tables, views, and procedures (includes URIs for direct navigation)"
+                "Lists all tables, views, procedures with navigation URIs"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/relationships",
                 "Schema FK relationships",
-                "All foreign key relationships involving tables in this schema (including cross-schema FKs)"
+                "FK relationships within and across schema boundaries with copy order"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/table/{table_name}",
                 "Table structure",
-                "Detailed table metadata: columns, PKs, FKs (both directions), indexes"
+                "Columns, PKs, indexes, foreignKeys (what this table references), reverseForeignKeys (what references this table)"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/view/{view_name}",
                 "View definition",
-                "View structure and SQL definition"
+                "View columns and SQL definition"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/procedure/{procedure_name}",
                 "Procedure/Function details",
-                "Parameters, return type, definition, language, determinism"
+                "Parameters, return type, definition"
             )
         );
 
@@ -235,20 +235,20 @@ public class ContextResource implements Resource {
             templates,
             navigationExamples,
             List.of(
-                "Resources are cacheable metadata",
-                "Table resources include FKs in both directions",
-                "Relationships resource provides complete FK graph"
+                "Table.foreignKeys = tables THIS table references",
+                "Table.reverseForeignKeys = tables that REFERENCE this table",
+                "Relationships resource includes copy order for data operations"
             )
         );
     }
 
     private List<String> getUsageHints() {
         return List.of(
-            "Start with db://context for complete overview",
-            "Use resources for structure (cacheable metadata)",
-            "Use tools for operations (query, count, sample, analyze)",
-            "Navigate: db://connections → db://connection/{id} → schema/{schema} → table/{table}",
-            "Query tool accepts SELECT only",
+            "db://context provides complete overview in one request",
+            "For FK discovery: use table resource (foreignKeys + reverseForeignKeys)",
+            "For copy order: use relationships resource (topologically sorted)",
+            "For filtered counts: use query tool with SELECT COUNT(*) ... WHERE",
+            "Resources = schema structure; Tools = data operations",
             "Schema defaults to connection's default if not specified"
         );
     }

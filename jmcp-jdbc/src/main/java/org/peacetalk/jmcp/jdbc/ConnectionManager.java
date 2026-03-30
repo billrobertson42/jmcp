@@ -173,12 +173,51 @@ public class ConnectionManager implements ConnectionContextResolver {
                 hikariConfigClass.getMethod("setReadOnly", boolean.class).invoke(config, true);
                 hikariConfigClass.getMethod("setDriverClassName", String.class).invoke(config, driver.getClass().getName());
 
+//                // For PostgreSQL, add connection properties to help with authentication
+//                if ("postgresql".equalsIgnoreCase(databaseType)) {
+//                    hikariConfigClass.getMethod("addDataSourceProperty", String.class, Object.class)
+//                        .invoke(config, "ApplicationName", "jmcp-server");
+//                    // Disable SSL by default for local connections (can be overridden in JDBC URL)
+//                    if (!jdbcUrl.contains("ssl")) {
+//                        hikariConfigClass.getMethod("addDataSourceProperty", String.class, Object.class)
+//                            .invoke(config, "ssl", "false");
+//                    }
+//                }
+
                 // Create HikariDataSource with the config
                 this.dataSource = (DataSource) hikariDataSourceClass
                     .getDeclaredConstructor(hikariConfigClass)
                     .newInstance(config);
 
             } catch (Exception e) {
+                System.err.println("=== Failed to create connection pool ===");
+                System.err.println("Connection ID: " + connectionId);
+                System.err.println("Database Type: " + databaseType);
+                System.err.println("JDBC URL: " + jdbcUrl);
+                System.err.println("Username: " + username);
+                System.err.println("Password: " + (password != null ? "****" : "null"));
+                System.err.println("Driver Class: " + driver.getClass().getName());
+                System.err.println("ClassLoader: " + classLoader.getClass().getName());
+                System.err.println("Max Pool Size: 5");
+                System.err.println("Min Idle: 0");
+                System.err.println("Read Only: true");
+
+                // Add specific guidance for Postgres.app trust authentication errors
+                if ("postgresql".equalsIgnoreCase(databaseType) &&
+                    e.getMessage() != null &&
+                    e.getMessage().contains("trust authentication")) {
+                    System.err.println("\n*** POSTGRES.APP TRUST AUTHENTICATION ERROR ***");
+                    System.err.println("Postgres.app is blocking trust authentication.");
+                    System.err.println("\nPossible solutions:");
+                    System.err.println("1. Add credentials to JDBC URL: jdbc:postgresql://localhost/dot?user=" + username + "&password=YOUR_PASSWORD");
+                    System.err.println("2. Configure Postgres.app to allow this app in Settings > App Permissions");
+                    System.err.println("3. Edit pg_hba.conf to use 'md5' or 'scram-sha-256' instead of 'trust' for localhost");
+                    System.err.println("   Location: ~/Library/Application Support/Postgres/var-XX/pg_hba.conf");
+                    System.err.println("   Change: 'host all all 127.0.0.1/32 trust' to 'host all all 127.0.0.1/32 md5'");
+                    System.err.println("   Then restart PostgreSQL in Postgres.app");
+                }
+
+                System.err.println("========================================");
                 throw new RuntimeException("Failed to create connection pool for " + connectionId, e);
             }
         }

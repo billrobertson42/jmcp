@@ -45,7 +45,7 @@ public class TableResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Table structure: columns, primary keys, indexes, foreign keys (both directions).";
+        return "Columns, PKs, indexes, foreignKeys (tables this references), reverseForeignKeys (tables that reference this).";
     }
 
     @Override
