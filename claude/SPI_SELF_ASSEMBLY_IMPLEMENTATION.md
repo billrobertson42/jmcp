@@ -27,7 +27,7 @@ All 7 steps of the v2 plan were implemented. Steps 1–4 were already complete w
 - `getResourceProvider()` — satisfies `McpProvider` interface directly
 - `getTools()`, `getName()`, `shutdown()` — unchanged from the old `JdbcToolProvider`
 
-**`JdbcToolProvider.java`** — Converted from a full class to a deprecated wrapper extending `JdbcMcpProvider`. No longer references the deleted `ToolProvider` interface. Retained to avoid breaking any lingering references.
+**`JdbcToolProvider.java`** — Deleted. `JdbcMcpProvider` is the sole implementation.
 
 **`jmcp-jdbc/module-info.java`** — Added:
 ```java
@@ -97,7 +97,6 @@ java --module-path "$MODULE_PATH" $JVM_ARGS \
 | Test File | Change |
 |-----------|--------|
 | `ServerToolProviderTest.java` | `provider.initialize()` → `provider.initialize(null)` |
-| `JdbcToolProviderTest.java` | Removed `ToolProvider` import; updated `initialize()` call to pass `Map`; changed `instanceof ToolProvider` to `instanceof McpProvider` |
 | `JdbcMcpProviderTest.java` | **New** — 14 tests covering null config, empty connections, tool discovery, resource provider, multiple initializations |
 
 ---
@@ -124,4 +123,6 @@ jmcp-server  ──(compile)──►  jmcp-core
 ```
 
 The server has **zero** compile-time knowledge of specific providers or transports.
+
+
 
