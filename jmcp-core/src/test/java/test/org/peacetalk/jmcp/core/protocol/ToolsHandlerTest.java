@@ -2,8 +2,8 @@ package test.org.peacetalk.jmcp.core.protocol;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.Tool;
-import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.model.CallToolRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
@@ -49,11 +49,11 @@ class ToolsHandlerTest {
     @Test
     void testListToolsWithMultipleProviders() throws Exception {
         // Create mock providers
-        ToolProvider provider1 = new MockToolProvider("provider1", List.of("tool1", "tool2"));
-        ToolProvider provider2 = new MockToolProvider("provider2", List.of("tool3", "tool4"));
+        McpProvider provider1 = new MockMcpProvider("provider1", List.of("tool1", "tool2"));
+        McpProvider provider2 = new MockMcpProvider("provider2", List.of("tool3", "tool4"));
 
-        handler.registerToolProvider(provider1);
-        handler.registerToolProvider(provider2);
+        handler.registerProvider(provider1);
+        handler.registerProvider(provider2);
 
         JsonRpcRequest request = new JsonRpcRequest("2.0", 1, "tools/list", null);
         JsonRpcResponse response = handler.handle(request);
@@ -65,8 +65,8 @@ class ToolsHandlerTest {
 
     @Test
     void testCallToolSuccess() throws Exception {
-        ToolProvider provider = new MockToolProvider("test", List.of("test_tool"));
-        handler.registerToolProvider(provider);
+        McpProvider provider = new MockMcpProvider("test", List.of("test_tool"));
+        handler.registerProvider(provider);
 
         CallToolRequest callRequest = new CallToolRequest("test_tool", mapper.createObjectNode());
         JsonRpcRequest request = new JsonRpcRequest("2.0", 1, "tools/call", callRequest);
@@ -80,8 +80,8 @@ class ToolsHandlerTest {
 
     @Test
     void testCallUnknownTool() throws Exception {
-        ToolProvider provider = new MockToolProvider("test", List.of("tool1"));
-        handler.registerToolProvider(provider);
+        McpProvider provider = new MockMcpProvider("test", List.of("tool1"));
+        handler.registerProvider(provider);
 
         CallToolRequest callRequest = new CallToolRequest("unknown_tool", mapper.createObjectNode());
         JsonRpcRequest request = new JsonRpcRequest("2.0", 1, "tools/call", callRequest);
@@ -95,26 +95,26 @@ class ToolsHandlerTest {
 
     @Test
     void testDuplicateToolNameAcrossProviders() {
-        ToolProvider provider1 = new MockToolProvider("provider1", List.of("duplicate_tool"));
-        ToolProvider provider2 = new MockToolProvider("provider2", List.of("duplicate_tool"));
+        McpProvider provider1 = new MockMcpProvider("provider1", List.of("duplicate_tool"));
+        McpProvider provider2 = new MockMcpProvider("provider2", List.of("duplicate_tool"));
 
-        handler.registerToolProvider(provider1);
+        handler.registerProvider(provider1);
 
         // Should throw when registering second provider with duplicate tool name
         IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
-            handler.registerToolProvider(provider2);
+            handler.registerProvider(provider2);
         });
 
         assertTrue(exception.getMessage().contains("duplicate_tool"));
         assertTrue(exception.getMessage().contains("already registered"));
     }
 
-    // Mock ToolProvider for testing
-    private static class MockToolProvider implements ToolProvider {
+    // Mock McpProvider for testing
+    private static class MockMcpProvider implements McpProvider {
         private final String name;
         private final List<Tool> tools;
 
-        public MockToolProvider(String name, List<String> toolNames) {
+        public MockMcpProvider(String name, List<String> toolNames) {
             this.name = name;
             this.tools = new ArrayList<>();
             for (String toolName : toolNames) {
@@ -123,7 +123,7 @@ class ToolsHandlerTest {
         }
 
         @Override
-        public void initialize() {}
+        public void initialize(java.util.Map<String, Object> config) {}
 
         @Override
         public List<Tool> getTools() {

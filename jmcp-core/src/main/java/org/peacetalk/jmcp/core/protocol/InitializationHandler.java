@@ -17,7 +17,28 @@ public class InitializationHandler implements McpProtocolHandler {
     private static final String VERSION = "1.0.0";
     private static final String PROTOCOL_VERSION = "2024-11-05";
 
+    private final boolean hasTools;
+    private final boolean hasResources;
     private volatile boolean initialized = false;
+
+    /**
+     * Create a handler that advertises dynamic capabilities based on what
+     * providers were actually assembled.
+     *
+     * @param hasTools     true if at least one tool provider was registered
+     * @param hasResources true if at least one resource provider was registered
+     */
+    public InitializationHandler(boolean hasTools, boolean hasResources) {
+        this.hasTools = hasTools;
+        this.hasResources = hasResources;
+    }
+
+    /**
+     * Backward-compatible default: advertise both tools and resources capabilities.
+     */
+    public InitializationHandler() {
+        this(true, true);
+    }
 
     @Override
     public Set<String> getSupportedMethods() {
@@ -35,13 +56,13 @@ public class InitializationHandler implements McpProtocolHandler {
     }
 
     private JsonRpcResponse handleInitialize(JsonRpcRequest request) {
-        // Build server capabilities
+        // Build server capabilities based on what was actually assembled
         ServerCapabilities capabilities = new ServerCapabilities(
             null, // experimental
             null, // logging
             null, // prompts
-            new ServerCapabilities.ResourcesCapability(false, false), // resources (no subscribe/listChanged)
-            new ServerCapabilities.ToolsCapability(false) // tools (no listChanged support yet)
+            hasResources ? new ServerCapabilities.ResourcesCapability(false, false) : null,
+            hasTools ? new ServerCapabilities.ToolsCapability(false) : null
         );
 
         // Build server info

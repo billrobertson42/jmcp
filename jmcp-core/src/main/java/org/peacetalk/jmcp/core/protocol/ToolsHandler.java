@@ -1,7 +1,7 @@
 package org.peacetalk.jmcp.core.protocol;
 
+import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.Tool;
-import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.core.model.*;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Generic MCP protocol handler for tools provided by ToolProviders.
+ * Generic MCP protocol handler for tools provided by McpProviders.
  * This handler aggregates tools from multiple providers and handles
  * tools/list and tools/call requests.
  *
@@ -23,7 +23,7 @@ import java.util.Set;
 public class ToolsHandler implements McpProtocolHandler {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private final List<ToolProvider> toolProviders;
+    private final List<McpProvider> toolProviders;
     private final Map<String, Tool> toolIndex;
 
     public ToolsHandler() {
@@ -32,14 +32,14 @@ public class ToolsHandler implements McpProtocolHandler {
     }
 
     /**
-     * Register a tool provider with this handler.
+     * Register a provider with this handler.
      * All tools from the provider will be available through this handler.
      * Builds an index of tool names for O(1) lookup during tool calls.
      *
-     * @param provider The tool provider to register
+     * @param provider The provider to register
      * @throws IllegalStateException if a tool with duplicate name is registered
      */
-    public void registerToolProvider(ToolProvider provider) {
+    public void registerProvider(McpProvider provider) {
         toolProviders.add(provider);
 
         // Build index for O(1) tool lookup
@@ -79,7 +79,7 @@ public class ToolsHandler implements McpProtocolHandler {
         List<org.peacetalk.jmcp.core.model.Tool> toolList = new ArrayList<>();
 
         // Aggregate tools from all registered providers
-        for (ToolProvider provider : toolProviders) {
+        for (McpProvider provider : toolProviders) {
             for (Tool tool : provider.getTools()) {
                 toolList.add(new org.peacetalk.jmcp.core.model.Tool(
                     tool.getName(),
