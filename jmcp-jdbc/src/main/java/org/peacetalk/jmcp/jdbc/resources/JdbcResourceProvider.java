@@ -192,7 +192,7 @@ public class JdbcResourceProvider implements ResourceProvider {
 
     @Override
     public void shutdown() {
-        // Connection manager shutdown is handled by JdbcToolProvider
+        // Connection manager shutdown is handled by JdbcMcpProvider
     }
 
     @Override

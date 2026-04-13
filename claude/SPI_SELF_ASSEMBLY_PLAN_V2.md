@@ -17,9 +17,11 @@ This revision incorporates decisions from the [gaps analysis](SPI_PLAN_GAPS_ANAL
 4. **The `asToolProvider` adapter is eliminated** — direct consequence of replacing `ToolProvider` with `McpProvider`.
 5. **Transport selection details** deferred to future transport work. Only stdio exists today.
 6. **`run.sh` updated with `--add-modules ALL-MODULE-PATH`** to ensure ServiceLoader can resolve provider modules. Eventual jlink deployment will handle this differently.
-7. **Provider initialization must fail hard** if configuration is missing or broken. The server must not start in a broken state.
+7. **Provider initialization must fail hard** if configuration is missing or broken. The server must not start in a broken state. Initialization failures throw standard JDK exceptions (`IllegalStateException`, `IOException`, etc.) — no custom exception classes.
 8. **Assembly logic extracted to a testable static method** on `Main`, with a qualified export so the test module can call it.
 9. **`requires org.slf4j` is removed.** No class in jmcp-server references SLF4J.
+10. **Server-mediated configuration** replaces provider self-configuration. The server reads the config file, keys it by JPMS module name, and passes each provider its section as `Map<String, Object>`. The `McpProvider.initialize()` signature accepts this map. No phased rollout — this is the design from day one.
+11. **Unnamed modules are disallowed.** A provider loaded from an unnamed module is an initialization failure. The server crashes with a diagnostic message.
 
 ---
 
@@ -145,9 +147,11 @@ The server always claims it has resource and tool capabilities, regardless of wh
 
 #### Problem 5: Configuration Is Embedded in the Provider
 
-`JdbcToolProvider.loadConfiguration()` reads from `~/.jmcp/config.json` or `JMCP_CONFIG` env var. This is fine for self-contained providers. Each `McpProvider` is responsible for finding its own configuration.
+`JdbcToolProvider.loadConfiguration()` reads from `~/.jmcp/config.json` or `JMCP_CONFIG` env var. Each provider independently searches the filesystem for its own configuration, duplicating file-resolution logic and coupling providers to a specific config file strategy.
 
-However, the current fallback to an empty configuration with zero connections is a problem. The server should not start with tools that cannot function. See §7 Step 5.
+**Resolution (v2):** The server owns configuration loading. It reads the config file once into a `Map<String, Object>` keyed by JPMS module name, then passes each provider its section via `initialize(Map<String, Object> config)`. Providers receive configuration — they don't search for it. This decouples providers from the config file mechanism entirely. If the server later switches to a database-backed or remote config source, providers are unaffected.
+
+Additionally, the current fallback to an empty configuration with zero connections is a problem. The server should not start with tools that cannot function. Providers that require configuration must throw when they receive null or insufficient config. See §7 Step 5 and §8.
 
 ### 2.3 What's Actually Good
 
@@ -206,20 +210,31 @@ However, the current fallback to an empty configuration with zero connections is
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Main.java (bootstrap)                        │
 │                                                                     │
-│  1. ServiceLoader.load(TransportProvider.class)                     │
+│  1. Load configuration:                                              │
+│     ├─► Try system property 'jmcp.config' → file path               │
+│     ├─► Try ~/.jmcp/config.json                                      │
+│     ├─► Try env var JMCP_CONFIG                                      │
+│     └─► If none found → configMap is null (not necessarily an error) │
+│                                                                     │
+│  2. ServiceLoader.load(TransportProvider.class)                     │
 │     └─► Discovers: StdioTransportProvider                           │
 │     └─► If none found → crash with diagnostic message               │
 │                                                                     │
-│  2. ServiceLoader.load(McpProvider.class)                           │
+│  3. ServiceLoader.load(McpProvider.class)                           │
 │     └─► Discovers: JdbcMcpProvider                                  │
 │     └─► If none found → crash (server has no purpose without        │
 │         providers)                                                   │
 │                                                                     │
-│  3. Initialize all providers:                                        │
-│     └─► provider.initialize() — if ANY throws → crash with full     │
-│         stack trace and provider name                                │
+│  4. For each discovered provider:                                    │
+│     ├─► Verify provider is in a named module                        │
+│     │   └─► If unnamed → crash (IllegalStateException)              │
+│     ├─► Look up config section: configMap.get(moduleName)           │
+│     │   └─► Result may be null — that's the provider's problem      │
+│     ├─► provider.initialize(configSection)                          │
+│     │   └─► If throws → crash with full stack trace + provider name │
+│     └─► Log success                                                  │
 │                                                                     │
-│  4. Assembly (in Main.assembleServer()):                             │
+│  5. Assembly (in Main.assembleServer()):                             │
 │     ├─► For each provider:                                          │
 │     │   ├─ Register with ToolsHandler (it reads getTools())         │
 │     │   └─ if provider.getResourceProvider() != null →              │
@@ -229,8 +244,8 @@ However, the current fallback to an empty configuration with zero connections is
 │     ├─► Configure InitializationHandler with actual capabilities    │
 │     └─► Return assembled McpServer                                  │
 │                                                                     │
-│  5. transport.start(mcpServer)                                      │
-│  6. Register shutdown hook (iterates all providers)                 │
+│  6. transport.start(mcpServer)                                      │
+│  7. Register shutdown hook (iterates all providers)                 │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -279,6 +294,7 @@ package org.peacetalk.jmcp.core;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * SPI interface for MCP capability providers.
@@ -294,6 +310,25 @@ import java.util.List;
  * To register a provider, add to module-info.java:
  *   provides org.peacetalk.jmcp.core.McpProvider
  *       with com.example.MyMcpProvider;
+ *
+ * <h2>Configuration</h2>
+ * The server reads a centralized config file and passes each provider
+ * its configuration section (keyed by JPMS module name) as a
+ * {@code Map<String, Object>}. The config parameter may be null if
+ * no section exists for this provider's module. Whether null config
+ * is an error is determined by the provider — providers that require
+ * configuration must throw.
+ *
+ * The centralized config mechanism does not prohibit providers from
+ * supplementing with their own configuration sources (system properties,
+ * environment variables, etc.).
+ *
+ * <h2>Error Handling</h2>
+ * Implementations MUST throw if initialization cannot complete
+ * successfully. A provider that initializes without error is expected
+ * to be fully functional. Do not swallow errors or fall back to a
+ * degraded state silently. Use standard JDK exception types
+ * (e.g., {@link IllegalStateException}, {@link java.io.IOException}).
  */
 public interface McpProvider {
     
@@ -301,15 +336,20 @@ public interface McpProvider {
     String getName();
     
     /**
-     * Initialize the provider. Called once after discovery.
-     * Providers should load their own configuration.
+     * Initialize the provider with the given configuration.
      *
-     * Implementations MUST throw if initialization cannot complete
-     * successfully. A provider that initializes without error is
-     * expected to be fully functional. Do not swallow errors or
-     * fall back to a degraded state silently.
+     * @param config Provider-specific configuration, extracted from the
+     *               server config file using the provider's JPMS module
+     *               name as the key. May be null if no configuration
+     *               section exists for this provider. Providers that
+     *               require configuration must throw an appropriate
+     *               exception (e.g., IllegalStateException) when config
+     *               is null or insufficient.
+     * @throws Exception if initialization fails for any reason. The
+     *                   server will log the exception, print the full
+     *                   stack trace, and terminate.
      */
-    void initialize() throws Exception;
+    void initialize(Map<String, Object> config) throws Exception;
     
     /**
      * Get all tools from this provider.
@@ -336,7 +376,7 @@ public interface McpProvider {
 
 ### 4.3 Why `McpProvider` Replaces `ToolProvider`
 
-`ToolProvider` has four methods: `getName()`, `initialize()`, `getTools()`, `shutdown()`. `McpProvider` has the same four, plus `getResourceProvider()`. Keeping both creates:
+`ToolProvider` has four methods: `getName()`, `initialize()`, `getTools()`, `shutdown()`. `McpProvider` has the same four, plus `getResourceProvider()`, and `initialize()` gains a `Map<String, Object> config` parameter for server-mediated configuration. Keeping both interfaces creates:
 
 1. A `JdbcMcpProvider` wrapper that delegates every call to `JdbcToolProvider` — pure boilerplate.
 2. An `asToolProvider()` adapter in Main that wraps `McpProvider` back into `ToolProvider` for `ToolsHandler` — another boilerplate layer.
@@ -537,7 +577,7 @@ Simple interface as defined in §4.1. Lives in the already-exported `org.peaceta
 - New: `jmcp-core/src/main/java/org/peacetalk/jmcp/core/McpProvider.java`
 - Delete: `jmcp-core/src/main/java/org/peacetalk/jmcp/core/ToolProvider.java`
 
-Interface as defined in §4.2. Lives in the already-exported `org.peacetalk.jmcp.core` package. No changes to `module-info.java`.
+Interface as defined in §4.2. Lives in the already-exported `org.peacetalk.jmcp.core` package. No changes to `module-info.java`. The `initialize()` method accepts `Map<String, Object> config` — see §8 for the configuration strategy.
 
 Deleting `ToolProvider.java` will cause compilation failures in `ToolsHandler`, `JdbcToolProvider`, and `ServerToolProvider`. These are fixed in Steps 3, 5, and 6 respectively.
 
@@ -637,7 +677,7 @@ public class StdioTransportProvider implements TransportProvider {
 
 **Verification:** ServiceLoader can find it in tests.
 
-### Step 5: Rename `JdbcToolProvider` to `JdbcMcpProvider`, implement `McpProvider`, enforce configuration
+### Step 5: Rename `JdbcToolProvider` to `JdbcMcpProvider`, implement `McpProvider`, receive config from server
 
 **Files:**
 - Rename: `JdbcToolProvider.java` → `JdbcMcpProvider.java`
@@ -655,67 +695,67 @@ public class JdbcMcpProvider implements McpProvider {
 
 The `getResourceProvider()` method already exists and now satisfies the `McpProvider` interface directly — no wrapper class needed.
 
-#### Configuration must fail hard
+#### Configuration: received from server, not self-loaded
 
-The current `loadConfiguration()` falls back to an empty config with zero connections when no config file or environment variable is found. This means the server starts with 5 tools that all fail at runtime because `ConnectionManager` has no connections registered.
-
-**Change:** If no configuration source is found, `loadConfiguration()` must throw an exception:
+The `loadConfiguration()` method that searched for config files is **deleted**. Configuration is now passed to `initialize()` by the server:
 
 ```java
-private static JdbcConfiguration loadConfiguration() throws IOException {
-    // Try system property first (for testing)
-    String configProperty = System.getProperty("jdbc.mcp.config");
-    if (configProperty != null) {
-        Path configPath = Paths.get(configProperty);
-        if (Files.exists(configPath)) {
-            System.err.println("Loading configuration from system property: " + configPath);
-            JsonNode configNode = MAPPER.readTree(configPath.toFile());
-            return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
-        }
-        throw new IOException(
-            "Configuration file specified by system property 'jdbc.mcp.config' " +
-            "does not exist: " + configPath);
+@Override
+public void initialize(Map<String, Object> config) throws Exception {
+    if (config == null) {
+        throw new IllegalStateException(
+            "JDBC provider requires configuration. " +
+            "Add an \"org.peacetalk.jmcp.jdbc\" section to the config file. " +
+            "See config.example.json for the expected format.");
     }
 
-    // Try config file
-    Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
-    if (Files.exists(configPath)) {
-        System.err.println("Loading configuration from: " + configPath);
-        JsonNode configNode = MAPPER.readTree(configPath.toFile());
-        return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
+    // Convert the generic map to our typed config using Jackson
+    JdbcConfiguration jdbcConfig = MAPPER.convertValue(config, JdbcConfiguration.class);
+
+    if (jdbcConfig.connections() == null || jdbcConfig.connections().length == 0) {
+        throw new IllegalStateException(
+            "JDBC configuration contains no connections. " +
+            "At least one connection must be configured.");
     }
 
-    // Try environment variable
-    String configEnv = System.getenv("JMCP_CONFIG");
-    if (configEnv != null) {
-        System.err.println("Loading configuration from JMCP_CONFIG environment variable");
-        JsonNode configNode = MAPPER.readTree(configEnv);
-        return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
+    // Setup driver cache directory
+    Path driverCacheDir = Paths.get(System.getProperty("user.home"), ".jmcp", "drivers");
+    Files.createDirectories(driverCacheDir);
+
+    // Initialize driver manager
+    driverManager = new JdbcDriverManager(driverCacheDir);
+
+    // Initialize connection manager
+    connectionManager = new ConnectionManager(driverManager);
+    connectionManager.setDefaultConnectionId(jdbcConfig.default_id());
+    connectionManager.setExposeUrls(jdbcConfig.expose_urls());
+
+    // Register connections from config
+    for (ConnectionConfig conn : jdbcConfig.connections()) {
+        System.err.println("Registering connection: " + conn.id());
+        connectionManager.registerConnection(
+            conn.id(), conn.databaseType(), conn.jdbcUrl(),
+            conn.username(), conn.password());
     }
 
-    // No configuration found — fail hard
-    throw new IOException(
-        "No JDBC configuration found. Provide one of:\n" +
-        "  1. System property: -Djdbc.mcp.config=/path/to/config.json\n" +
-        "  2. Config file: " + configPath + "\n" +
-        "  3. Environment variable: JMCP_CONFIG='{...}'\n" +
-        "See config.example.json for the expected format.");
+    // Initialize tools...
+    // (same as current code)
+
+    resourceProvider = new JdbcResourceProvider();
+    resourceProvider.setConnectionManager(connectionManager);
+    resourceProvider.initialize();
 }
 ```
 
-Similarly, if a config is found but contains zero connections, `initialize()` should throw:
+Key changes:
+- `loadConfiguration()` is deleted entirely. The file-search logic (system property → file → env var) moves to `Main.java` (see §8).
+- `initialize()` accepts `Map<String, Object> config` per the `McpProvider` contract.
+- `MAPPER.convertValue(config, JdbcConfiguration.class)` converts the generic map to the typed `JdbcConfiguration` record. This is a one-liner that replaces the file-parsing code.
+- Null config → `IllegalStateException` with a message pointing to `config.example.json`.
+- Zero connections → `IllegalStateException`. The server never starts with broken tools.
+- Standard JDK exceptions are used — no custom exception classes.
 
-```java
-if (jdbcConfig.connections().length == 0) {
-    throw new IllegalStateException(
-        "JDBC configuration contains no connections. " +
-        "At least one connection must be configured.");
-}
-```
-
-This ensures the server never starts with broken tools. Since the project philosophy is fail fast and fail hard, and this is the initialization step, the exception propagates up to `Main.java` and crashes the server with a full stack trace.
-
-**Verification:** ServiceLoader can find `JdbcMcpProvider`. Existing JDBC tests that supply config via system property continue to pass. A new test verifies the missing-config exception.
+**Verification:** ServiceLoader can find `JdbcMcpProvider`. Existing JDBC tests that supply config must be updated to pass a `Map<String, Object>` instead of relying on file search. A new test verifies the null-config and zero-connections exceptions.
 
 ### Step 6: Rewrite `Main.java` + update server module-info + update `ServerToolProvider`
 
@@ -730,8 +770,13 @@ This ensures the server never starts with broken tools. Since the project philos
 
 ```java
 public class ServerToolProvider implements McpProvider {
-    // getName(), initialize(), getTools(), shutdown() — unchanged
+    // getName(), getTools(), shutdown() — unchanged
     // getResourceProvider() — inherits default (returns null), which is correct
+    
+    @Override
+    public void initialize(Map<String, Object> config) {
+        // No initialization needed — resource proxy is fully configured at construction
+    }
 }
 ```
 
@@ -755,49 +800,73 @@ import org.peacetalk.jmcp.core.protocol.*;
 import org.peacetalk.jmcp.core.transport.McpTransport;
 import org.peacetalk.jmcp.core.transport.TransportProvider;
 import org.peacetalk.jmcp.server.tools.ServerToolProvider;
+import tools.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
+import java.nio.file.*;
 import java.util.*;
 
 public class Main {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static void main(String[] args) {
         List<McpProvider> providers = new ArrayList<>();
         McpTransport transport = null;
 
         try {
-            // 1. Discover transport
+            // 1. Load configuration
+            Map<String, Object> configMap = loadConfiguration();
+
+            // 2. Discover transport
             TransportProvider transportProvider = ServiceLoader.load(TransportProvider.class)
                 .stream()
                 .map(ServiceLoader.Provider::get)
                 .max(Comparator.comparingInt(TransportProvider::priority))
-                .orElseThrow(() -> new RuntimeException(
+                .orElseThrow(() -> new IllegalStateException(
                     "No TransportProvider found on module path. " +
                     "Ensure a transport module (e.g., jmcp-transport-stdio) " +
                     "is on the module path and resolved via --add-modules."));
 
             System.err.println("Using transport: " + transportProvider.getName());
 
-            // 2. Discover MCP providers
+            // 3. Discover MCP providers
             ServiceLoader.load(McpProvider.class).forEach(providers::add);
 
             if (providers.isEmpty()) {
-                throw new RuntimeException(
+                throw new IllegalStateException(
                     "No McpProvider found on module path. " +
                     "Ensure at least one provider module (e.g., jmcp-jdbc) " +
                     "is on the module path and resolved via --add-modules.");
             }
 
-            // 3. Initialize all providers — fail fast on any error
+            // 4. Initialize all providers — fail fast on any error
             for (McpProvider provider : providers) {
-                System.err.println("Initializing provider: " + provider.getName() + "...");
-                provider.initialize();  // throws on failure → crashes server
+                // Verify provider is in a named JPMS module
+                Module module = provider.getClass().getModule();
+                String moduleName = module.getName();
+                if (moduleName == null) {
+                    throw new IllegalStateException(
+                        "McpProvider " + provider.getClass().getName() +
+                        " is in an unnamed module. " +
+                        "All MCP providers must be in named JPMS modules.");
+                }
+
+                // Look up this provider's config section by module name
+                @SuppressWarnings("unchecked")
+                Map<String, Object> providerConfig = configMap != null
+                    ? (Map<String, Object>) configMap.get(moduleName)
+                    : null;
+
+                System.err.println("Initializing provider: " + provider.getName() +
+                    " (module: " + moduleName + ")...");
+                provider.initialize(providerConfig);  // throws on failure → crashes server
                 System.err.println("Initialized provider: " + provider.getName());
             }
 
-            // 4. Assemble server
+            // 5. Assemble server
             McpServer mcpServer = assembleServer(providers);
 
-            // 5. Start transport
+            // 6. Start transport
             transport = transportProvider.createTransport();
 
             final McpTransport finalTransport = transport;
@@ -853,6 +922,55 @@ public class Main {
     }
 
     /**
+     * Load the server configuration file.
+     * The config file is a JSON object keyed by JPMS module name.
+     *
+     * Search order:
+     * 1. System property 'jmcp.config' → file path
+     * 2. ~/.jmcp/config.json
+     * 3. Environment variable JMCP_CONFIG (JSON string)
+     *
+     * @return the parsed config map, or null if no config file is found.
+     *         A null return is not an error — providers decide whether
+     *         they require configuration.
+     * @throws IOException if a config source is found but cannot be read/parsed
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> loadConfiguration() throws IOException {
+        // Try system property first
+        String configProperty = System.getProperty("jmcp.config");
+        if (configProperty != null) {
+            Path configPath = Paths.get(configProperty);
+            if (!Files.exists(configPath)) {
+                throw new IOException(
+                    "Configuration file specified by system property 'jmcp.config' " +
+                    "does not exist: " + configPath);
+            }
+            System.err.println("Loading configuration from system property: " + configPath);
+            return MAPPER.readValue(configPath.toFile(), Map.class);
+        }
+
+        // Try default config file
+        Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
+        if (Files.exists(configPath)) {
+            System.err.println("Loading configuration from: " + configPath);
+            return MAPPER.readValue(configPath.toFile(), Map.class);
+        }
+
+        // Try environment variable
+        String configEnv = System.getenv("JMCP_CONFIG");
+        if (configEnv != null) {
+            System.err.println("Loading configuration from JMCP_CONFIG environment variable");
+            return MAPPER.readValue(configEnv, Map.class);
+        }
+
+        // No configuration found — not necessarily an error
+        System.err.println("No configuration file found. " +
+            "Providers that require configuration will fail during initialization.");
+        return null;
+    }
+
+    /**
      * Assemble an McpServer from discovered and initialized providers.
      * Public for testability (accessible via qualified export to test module).
      *
@@ -902,15 +1020,21 @@ public class Main {
 **Key differences from v1:**
 - No `ToolProvider` import, no `asToolProvider()` adapter.
 - `assembleServer` is `public static` (not `private static`).
+- `loadConfiguration()` centralizes config file search — providers receive their section, don't search for files.
+- Config keyed by JPMS module name via `provider.getClass().getModule().getName()`.
+- Unnamed modules are rejected with `IllegalStateException`.
 - Zero providers = crash, not warning. The server has no purpose without providers.
+- Standard JDK exceptions throughout (`IllegalStateException`, `IOException`) — no custom exception classes.
 - Full cleanup in the catch block with per-provider error reporting.
 - Error messages in `orElseThrow` include diagnostic hints about `--add-modules`.
 
-### Step 7: Update Maven POMs and `run.sh`
+### Step 7: Update Maven POMs, `run.sh`, config file, and documentation
 
 **Files:**
 - Modify: `jmcp-server/pom.xml`
 - Modify: `run.sh`
+- Modify: `config.example.json`
+- Modify: `README.md`
 
 #### pom.xml changes
 
@@ -950,34 +1074,145 @@ java --module-path "$MODULE_PATH" $JVM_ARGS \
 
 **Note:** When the project moves to jlink deployment, `--add-modules` will be specified at jlink time instead, and the resulting custom runtime image will have all modules pre-resolved. The `run.sh` approach is for development/packaging use.
 
+#### config.example.json changes
+
+The config file format changes from flat JDBC config to a map keyed by module name:
+
+**Before:**
+```json
+{
+  "default_id": "default",
+  "expose_urls": false,
+  "connections": [
+    {
+      "id": "default",
+      "databaseType": "postgresql",
+      "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
+      "username": "readonly_user",
+      "password": "secret"
+    }
+  ]
+}
+```
+
+**After:**
+```json
+{
+  "org.peacetalk.jmcp.jdbc": {
+    "default_id": "default",
+    "expose_urls": false,
+    "connections": [
+      {
+        "id": "default",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
+        "username": "readonly_user",
+        "password": "secret"
+      }
+    ]
+  }
+}
+```
+
+#### README.md changes
+
+The Configuration section must be updated to:
+- Show the new config file format (keyed by module name)
+- Document that the config file is read by the server, not by individual providers
+- Document that `initialize()` failures crash the server with full diagnostics
+- Note that providers may supplement the server-provided config with their own sources (system properties, env vars, etc.)
+- Update the system property name from `jdbc.mcp.config` to `jmcp.config`
+
 ---
 
 ## 8. Configuration Strategy <a id="configuration-strategy"></a>
 
-### Current State
+### 8.1 Design: Server-Mediated Configuration by Module Name
 
-Each provider loads its own config. `JdbcMcpProvider` reads from:
-1. System property `jdbc.mcp.config`
-2. `~/.jmcp/config.json`
-3. Environment variable `JMCP_CONFIG`
+The server owns configuration loading. Providers receive configuration — they do not search for it. This decouples providers from the config file mechanism. If the server later switches to a database-backed or remote config source, providers are unaffected.
 
-If none are found, initialization **throws** (changed from v1 — see Step 5).
+**Config file format:** A JSON object keyed by JPMS module name. Each value is a provider-specific configuration object:
 
-### Recommended Approach: Provider Self-Configuration (Phase 1)
-
-Keep the current approach. Each `McpProvider` is responsible for finding its own configuration. This is the simplest path and avoids designing a configuration framework.
-
-### Future Enhancement: Server-Mediated Configuration (Phase 2)
-
-Add an optional method to `McpProvider`:
-
-```java
-default void configure(JsonNode providerConfig) {
-    // Override to accept configuration from the server
+```json
+{
+  "org.peacetalk.jmcp.jdbc": {
+    "default_id": "default",
+    "expose_urls": false,
+    "connections": [
+      {
+        "id": "default",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
+        "username": "readonly_user",
+        "password": "secret"
+      },
+      {
+        "id": "analytics",
+        "databaseType": "mysql",
+        "jdbcUrl": "jdbc:mysql://localhost:3306/analytics",
+        "username": "reader",
+        "password": "secret"
+      }
+    ]
+  }
 }
 ```
 
-This is **not needed for the initial refactoring** but the `McpProvider` interface is designed to accommodate it later.
+This is a **breaking change** from the current config format, where JDBC config sits at the top level. The `config.example.json` and README must be updated.
+
+### 8.2 Config File Search (owned by Main)
+
+The server searches for the config file in this order:
+
+1. **System property** `jmcp.config` → file path (primarily for testing)
+2. **Default file** `~/.jmcp/config.json`
+3. **Environment variable** `JMCP_CONFIG` (JSON string)
+
+If a source is found but cannot be read or parsed, the server crashes with an `IOException` and the full stack trace.
+
+If no source is found, the config map is **null**. This is not an error at the server level — providers that do not require configuration (e.g., a hypothetical echo provider) can accept null. Providers that require configuration must throw during `initialize()`.
+
+### 8.3 Module Name Lookup
+
+For each discovered provider, the server obtains the JPMS module name:
+
+```java
+String moduleName = provider.getClass().getModule().getName();
+```
+
+This is reliable because all providers are in named JPMS modules. Providers in unnamed modules are explicitly rejected — the server throws `IllegalStateException` before attempting initialization.
+
+The module name is used as the key to look up the provider's config section:
+
+```java
+Map<String, Object> providerConfig = configMap != null
+    ? (Map<String, Object>) configMap.get(moduleName)
+    : null;
+provider.initialize(providerConfig);
+```
+
+### 8.4 Provider Receives `Map<String, Object>`
+
+The `McpProvider.initialize(Map<String, Object> config)` contract:
+
+- **`config` may be null** — no config section exists for this provider's module. Whether this is an error is the provider's decision.
+- **`config` is a `Map<String, Object>`** — a standard JDK type, not a Jackson type. This keeps Jackson out of the SPI contract. Providers convert to their typed config internally (e.g., `MAPPER.convertValue(config, JdbcConfiguration.class)`).
+- **Failures must throw** — use standard JDK exceptions (`IllegalStateException` for missing/invalid config, `IOException` for I/O problems). No custom exception classes.
+
+### 8.5 Alternate Configuration Mechanisms
+
+The centralized config file mechanism does **not** prohibit providers from having additional configuration sources. A provider may supplement the server-provided config with:
+
+- System properties (e.g., `-Djdbc.mcp.someOverride=value`)
+- Environment variables
+- Provider-specific config files
+- Programmatic defaults
+
+The server-provided config via `initialize()` is the primary mechanism. Alternate sources are at the provider's discretion and not managed by the server.
+
+### 8.6 Config for Transports (Future)
+
+The same module-name keying mechanism can serve `TransportProvider` if transports ever need configuration. The `TransportProvider` interface could gain an `initialize(Map<String, Object> config)` method following the same pattern. This is not needed now — only stdio exists today and it requires no configuration.
 
 ---
 
@@ -991,9 +1226,10 @@ None. `ResourceProxyTool` and `ServerToolProvider` stay in `jmcp-server`, so the
 
 | Test | Change |
 |------|--------|
-| `ServerToolProviderTest` | Change `ToolProvider`-related assertions if any (current tests don't reference `ToolProvider` by name, so this is likely just a recompile) |
+| `ServerToolProviderTest` | `initialize()` signature changes to accept `Map<String, Object>` — update calls |
 | `jmcp-server` test `module-info.java` | No changes needed — it already only `requires org.peacetalk.jmcp.server` and `org.peacetalk.jmcp.core` |
 | `jmcp-jdbc` tests referencing `JdbcToolProvider` | Update to reference `JdbcMcpProvider` (class rename) |
+| `jmcp-jdbc` tests calling `initialize()` | Must pass a `Map<String, Object>` config instead of relying on system property file search |
 | Any test using `ToolsHandler.registerToolProvider()` | Update to `registerProvider()` |
 | Any test using `InitializationHandler()` no-arg | Still works (backward compatible) |
 
@@ -1004,9 +1240,11 @@ None. `ResourceProxyTool` and `ServerToolProvider` stay in `jmcp-server`, so the
 | `InitializationHandlerDynamicTest` | `jmcp-core` | Verify capabilities reflect constructor args: tools-only, resources-only, both, neither |
 | `TransportProviderServiceLoaderTest` | `jmcp-transport-stdio` | Verify `StdioTransportProvider` is discoverable via ServiceLoader |
 | `McpProviderServiceLoaderTest` | `jmcp-jdbc` | Verify `JdbcMcpProvider` is discoverable via ServiceLoader |
-| `JdbcMcpProviderMissingConfigTest` | `jmcp-jdbc` | Verify that `initialize()` throws with diagnostic message when no config is found |
+| `JdbcMcpProviderNullConfigTest` | `jmcp-jdbc` | Verify that `initialize(null)` throws `IllegalStateException` with diagnostic message |
 | `JdbcMcpProviderEmptyConnectionsTest` | `jmcp-jdbc` | Verify that `initialize()` throws when config has zero connections |
+| `LoadConfigurationTest` | `jmcp-server` | Verify config file search order, null return when no file, `IOException` on bad file |
 | `ServerAssemblyTest` | `jmcp-server` | Call `Main.assembleServer()` with mock `McpProvider`s; verify proxy creation, capability flags, handler registration |
+| `UnnamedModuleRejectionTest` | `jmcp-server` | Verify that a provider from an unnamed module is rejected with `IllegalStateException` |
 | `SpiIntegrationTest` | `jmcp-server` | End-to-end: verify both SPIs discover their providers when modules are on the module path |
 
 #### Testability of `assembleServer`
@@ -1032,7 +1270,9 @@ All `jmcp-jdbc` tool and resource tests that operate at the `JdbcTool` and `Reso
 | Provider modules not resolved without `--add-modules` | **Blocker** | `--add-modules ALL-MODULE-PATH` in run.sh (§7 Step 7); verified in SpiIntegrationTest |
 | `ToolProvider` deletion breaks downstream code | Medium | Compile-time error — all references updated in Steps 3, 5, 6. Search-and-replace across codebase. |
 | `JdbcToolProvider` rename breaks JDBC tests | Medium | Search-and-replace within jmcp-jdbc module. Tests use the class directly, not via SPI. |
-| Missing config now crashes instead of starting empty | Medium | Intentional behavior change. New tests verify the error messages are diagnostic. Existing tests supply config via system property and are unaffected. |
+| Config file format is a breaking change | Medium | Existing `~/.jmcp/config.json` files must be restructured to nest under the module name key. `config.example.json` and README updated. Users must migrate manually. |
+| System property name changes (`jdbc.mcp.config` → `jmcp.config`) | Medium | The old system property was provider-specific; the new one is server-level. Tests that used the old property must be updated. |
+| Null config crashes JDBC provider instead of starting empty | Medium | Intentional behavior change. New tests verify the error messages are diagnostic. |
 | Breaking change to `InitializationHandler` constructor | Low | No-arg constructor preserved as backward-compatible default. |
 | `opens org.peacetalk.jmcp.server.tools` insufficient for Jackson | Low | Current code only serializes core model types. The `opens` is defensive; can be removed if verified unnecessary. |
 
@@ -1049,7 +1289,7 @@ Step  Description                                    Risk   Breaks Existing?
  4    Implement StdioTransportProvider                None   No
  5    Rename JdbcToolProvider → JdbcMcpProvider       Med    JDBC tests need update
  6    Rewrite Main.java + ServerToolProvider + mod    Med    Server assembly changes
- 7    Update POMs + run.sh                            Low    Build/launch changes
+ 7    Update POMs + run.sh + config + docs            Med    Config format breaking change
 ```
 
 Steps 1-3 must be done together (they form an atomic change to jmcp-core). Step 4 is independent. Steps 5-6 can be done in either order but both must be done before Step 7. Step 7 locks in the decoupling at the build and launch level.

@@ -42,8 +42,8 @@ public class ServerToolProviderTest {
 
     @Test
     public void testInitialize() {
-        // Should not throw exception
-        assertDoesNotThrow(() -> provider.initialize());
+        // Should not throw exception — null config is fine for server-level tools
+        assertDoesNotThrow(() -> provider.initialize(null));
     }
 
     @Test

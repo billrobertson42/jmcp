@@ -22,6 +22,9 @@ for arg in "$@"; do
 done
 
 # Run with java using module path
+# --add-modules ALL-MODULE-PATH ensures ServiceLoader can resolve provider modules
+# (jmcp-jdbc and jmcp-transport-stdio are runtime-only dependencies, not required by jmcp-server)
 java --module-path "$MODULE_PATH" $JVM_ARGS \
+     --add-modules ALL-MODULE-PATH \
      --module org.peacetalk.jmcp.server/org.peacetalk.jmcp.server.Main
 

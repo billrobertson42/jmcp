@@ -1,21 +1,22 @@
 {
-  "default_id": "default",
-  "expose_urls": false,
-  "connections": [
-    {
-      "id": "default",
-      "databaseType": "postgresql",
-      "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
-      "username": "readonly_user",
-      "password": "secret"
-    },
-    {
-      "id": "analytics",
-      "databaseType": "mysql",
-      "jdbcUrl": "jdbc:mysql://localhost:3306/analytics",
-      "username": "reader",
-      "password": "secret"
-    }
-  ]
+  "org.peacetalk.jmcp.jdbc": {
+    "default_id": "default",
+    "expose_urls": false,
+    "connections": [
+      {
+        "id": "default",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
+        "username": "readonly_user",
+        "password": "secret"
+      },
+      {
+        "id": "analytics",
+        "databaseType": "mysql",
+        "jdbcUrl": "jdbc:mysql://localhost:3306/analytics",
+        "username": "reader",
+        "password": "secret"
+      }
+    ]
+  }
 }
-

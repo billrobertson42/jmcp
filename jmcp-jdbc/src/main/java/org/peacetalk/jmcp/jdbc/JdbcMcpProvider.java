@@ -1,33 +1,35 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.Tool;
-import org.peacetalk.jmcp.core.ToolProvider;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.config.JdbcConfiguration;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
 import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
-import org.peacetalk.jmcp.jdbc.tools.*;
-import tools.jackson.databind.JsonNode;
+import org.peacetalk.jmcp.jdbc.tools.AnalyzeColumnTool;
+import org.peacetalk.jmcp.jdbc.tools.ExplainQueryTool;
+import org.peacetalk.jmcp.jdbc.tools.GetRowCountTool;
+import org.peacetalk.jmcp.jdbc.tools.QueryTool;
+import org.peacetalk.jmcp.jdbc.tools.SampleDataTool;
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Tool provider for JDBC-based database tools.
+ * McpProvider implementation for JDBC-based database tools.
  *
- * This provider:
- * - Manages JDBC driver loading and classloader isolation
- * - Manages database connections
- * - Provides read-only database query and inspection tools
- * - Provides a resource provider for navigable database resources
+ * Configuration is supplied by the server via initialize(Map) using this
+ * provider's JPMS module name ("org.peacetalk.jmcp.jdbc") as the config key.
+ * A null config is a fatal initialization error — the server will crash with
+ * a diagnostic message.
  */
-public class JdbcToolProvider implements ToolProvider {
+public class JdbcMcpProvider implements McpProvider {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private JdbcDriverManager driverManager;
@@ -35,13 +37,26 @@ public class JdbcToolProvider implements ToolProvider {
     private JdbcResourceProvider resourceProvider;
     private final List<Tool> tools;
 
-    public JdbcToolProvider() {
+    public JdbcMcpProvider() {
         this.tools = new ArrayList<>();
     }
 
     @Override
-    public void initialize() throws Exception {
-        JdbcConfiguration jdbcConfig = loadConfiguration();
+    public void initialize(Map<String, Object> config) throws Exception {
+        if (config == null) {
+            throw new IllegalStateException(
+                "JDBC provider requires configuration. " +
+                "Add an \"org.peacetalk.jmcp.jdbc\" section to the config file. " +
+                "See config.example.json for the expected format.");
+        }
+
+        JdbcConfiguration jdbcConfig = MAPPER.convertValue(config, JdbcConfiguration.class);
+
+        if (jdbcConfig.connections() == null || jdbcConfig.connections().length == 0) {
+            throw new IllegalStateException(
+                "JDBC configuration contains no connections. " +
+                "At least one connection must be configured.");
+        }
 
         // Setup driver cache directory
         Path driverCacheDir = Paths.get(System.getProperty("user.home"), ".jmcp", "drivers");
@@ -77,6 +92,7 @@ public class JdbcToolProvider implements ToolProvider {
         tools.add(new JdbcToolAdapter(new GetRowCountTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new SampleDataTool(), connectionManager));
         tools.add(new JdbcToolAdapter(new AnalyzeColumnTool(), connectionManager));
+
         resourceProvider = new JdbcResourceProvider();
         resourceProvider.setConnectionManager(connectionManager);
         resourceProvider.initialize();
@@ -88,11 +104,12 @@ public class JdbcToolProvider implements ToolProvider {
     }
 
     /**
-     * Get the resource provider created by this tool provider.
+     * Get the resource provider created by this provider.
      * The resource provider shares the same connection manager.
      *
      * @return the JDBC resource provider, or null if not initialized
      */
+    @Override
     public ResourceProvider getResourceProvider() {
         return resourceProvider;
     }
@@ -111,42 +128,5 @@ public class JdbcToolProvider implements ToolProvider {
     @Override
     public String getName() {
         return "JDBC Database Tools";
-    }
-
-    /**
-     * Load JDBC configuration from file or environment variable
-     */
-    private static JdbcConfiguration loadConfiguration() throws IOException {
-        // Try system property first (for testing)
-        String configProperty = System.getProperty("jdbc.mcp.config");
-        if (configProperty != null) {
-            Path configPath = Paths.get(configProperty);
-            if (Files.exists(configPath)) {
-                System.err.println("Loading configuration from system property: " + configPath);
-                JsonNode configNode = MAPPER.readTree(configPath.toFile());
-                return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
-            }
-        }
-
-        // Try to load from config file
-        Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
-
-        if (Files.exists(configPath)) {
-            System.err.println("Loading configuration from: " + configPath);
-            JsonNode configNode = MAPPER.readTree(configPath.toFile());
-            return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
-        }
-
-        // Try environment variable
-        String configEnv = System.getenv("JMCP_CONFIG");
-        if (configEnv != null) {
-            System.err.println("Loading configuration from JMCP_CONFIG environment variable");
-            JsonNode configNode = MAPPER.readTree(configEnv);
-            return MAPPER.treeToValue(configNode, JdbcConfiguration.class);
-        }
-
-        // Use default empty configuration
-        System.err.println("No configuration found, using defaults");
-        return new JdbcConfiguration("default", false, new ConnectionConfig[0]);
     }
 }

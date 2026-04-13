@@ -19,5 +19,8 @@ module org.peacetalk.jmcp.jdbc {
     opens org.peacetalk.jmcp.jdbc.config;
     opens org.peacetalk.jmcp.jdbc.tools.results;
     opens org.peacetalk.jmcp.jdbc.resources;
+
+    provides org.peacetalk.jmcp.core.McpProvider
+        with org.peacetalk.jmcp.jdbc.JdbcMcpProvider;
 }
 
