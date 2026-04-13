@@ -10,19 +10,24 @@ mvn clean package
 
 ### 2. Configure Database Connections
 
-Create `~/.jmcp/config.json`:
+Create `~/.jmcp/config.json`. The top-level key is the JPMS module name of the
+provider that consumes the configuration:
 
 ```json
 {
-  "connections": [
-    {
-      "id": "mydb",
-      "databaseType": "postgresql",
-      "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
-      "username": "readonly_user",
-      "password": "secret"
-    }
-  ]
+  "org.peacetalk.jmcp.jdbc": {
+    "default_id": "mydb",
+    "expose_urls": false,
+    "connections": [
+      {
+        "id": "mydb",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
+        "username": "readonly_user",
+        "password": "secret"
+      }
+    ]
+  }
 }
 ```
 
@@ -39,7 +44,9 @@ mvn -q -pl jmcp-server exec:java
 ```
 
 The server will:
-- Read configuration from `~/.jmcp/config.json` or `jmcp_CONFIG` environment variable
+- Search for config: `-Djmcp.config` system property → `~/.jmcp/config.json` → `JMCP_CONFIG` env var
+- Pass each provider its config section keyed by JPMS module name
+- Crash with a full stack trace if any provider fails to initialize
 - Download required JDBC drivers from Maven Central on first use
 - Cache drivers in `~/.jmcp/drivers/`
 - Start listening on stdin for JSON-RPC requests
@@ -63,11 +70,18 @@ Supported values for `databaseType`:
 
 ### Environment Variable Configuration
 
-Instead of a config file, you can use the `jmcp_CONFIG` environment variable:
+Instead of a config file, you can set `JMCP_CONFIG` to a JSON string containing the
+full config (same module-keyed format):
 
 ```bash
-export jmcp_CONFIG='{"connections":[{"id":"test","databaseType":"h2","jdbcUrl":"jdbc:h2:mem:test","username":"sa","password":""}]}'
+export JMCP_CONFIG='{"org.peacetalk.jmcp.jdbc":{"default_id":"test","expose_urls":false,"connections":[{"id":"test","databaseType":"h2","jdbcUrl":"jdbc:h2:mem:test","username":"sa","password":""}]}}'
 ./run.sh
+```
+
+Or point to a specific file with a system property:
+
+```bash
+./run.sh -Djmcp.config=/path/to/my-config.json
 ```
 
 ## Available Tools
@@ -86,37 +100,27 @@ Execute SELECT queries with optional parameters.
 ```
 
 **Features:**
-- Only SELECT queries allowed
+- Only SELECT queries allowed (DML/DDL rejected)
 - Maximum 1000 rows returned
 - 30-second query timeout
 - Prepared statement support
+- Set `validate_only` to `true` to check syntax without executing
 
-### 2. `list-tables`
+### 2. `explain-query`
 
-List all tables in the database or specific schema.
+Get the execution plan for a SELECT query.
 
 **Input:**
 ```json
 {
   "connectionId": "mydb",
-  "schema": "public"
+  "sql": "SELECT * FROM orders WHERE customer_id = 42"
 }
 ```
 
-### 3. `list-schemas`
+### 3. `get-row-count`
 
-List all schemas/catalogs in the database.
-
-**Input:**
-```json
-{
-  "connectionId": "mydb"
-}
-```
-
-### 4. `describe-table`
-
-Get detailed table structure including columns, types, primary keys, and indexes.
+Get the exact row count for a table.
 
 **Input:**
 ```json
@@ -127,31 +131,54 @@ Get detailed table structure including columns, types, primary keys, and indexes
 }
 ```
 
-### 5. `get-row-count`
+### 4. `sample-data`
 
-Get the total number of rows in a table.
-
-**Input:**
-```json
-{
-  "connectionId": "mydb",
-  "table": "users",
-  "schema": "public"
-}
-```
-
-### 6. `preview-table`
-
-Get the first N rows from a table (default 10, max 100).
+Get sample rows from a table using a chosen strategy.
 
 **Input:**
 ```json
 {
   "connectionId": "mydb",
   "table": "users",
-  "limit": 20
+  "schema": "public",
+  "strategy": "random",
+  "sample_size": 20
 }
 ```
+
+Strategies: `first` (default), `random`, `last`. Maximum 100 rows.
+
+### 5. `analyze-column`
+
+Analyze a column's data distribution: distinct count, null count, min/max values,
+and top N most-frequent values with frequencies.
+
+**Input:**
+```json
+{
+  "connectionId": "mydb",
+  "table": "users",
+  "column": "country",
+  "schema": "public",
+  "top_values": 10
+}
+```
+
+### 6. `resource-proxy`
+
+Workaround for MCP clients that don't implement the resources protocol (e.g., GitHub
+Copilot). Exposes database schema resources via the tools API.
+
+**Input:**
+```json
+{ "operation": "list" }
+```
+```json
+{ "operation": "read", "uri": "db://context" }
+```
+
+Use `uri='db://context'` for a complete schema overview. Ignore this tool if your
+client supports MCP resources natively.
 
 ## MCP Protocol Examples
 
@@ -192,9 +219,10 @@ Get the first N rows from a table (default 10, max 100).
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "list-tables",
+    "name": "get-row-count",
     "arguments": {
-      "connectionId": "mydb"
+      "connectionId": "mydb",
+      "table": "users"
     }
   }
 }
@@ -270,14 +298,37 @@ Each database connection uses an isolated classloader for its JDBC driver. This 
 ### Adding New Tools
 
 1. Create a class implementing `JdbcTool` in `jmcp-jdbc/src/main/java/org/peacetalk/jmcp/jdbc/tools/`
-2. Register the tool in `Main.java`
+2. Register the tool in `JdbcMcpProvider.initialize()` (add a `new JdbcToolAdapter(...)` line)
 3. Rebuild: `mvn clean package`
 
-### Adding New Transport
+### Adding New Transports
 
-1. Create a module implementing `McpTransport`
-2. Register in `Main.java` as alternative to stdio
-3. Common transports: SSE (Server-Sent Events), WebSocket, HTTP
+1. Create a new module (e.g., `jmcp-transport-sse`)
+2. Implement `TransportProvider` from `jmcp-core`
+3. Declare the provider in the module's `module-info.java`:
+   ```java
+   provides org.peacetalk.jmcp.core.transport.TransportProvider
+       with com.example.SseTransportProvider;
+   ```
+4. Add the module as a `runtime` dependency of `jmcp-server`
+
+The server discovers transports via `ServiceLoader` at startup and uses the one with
+the highest `priority()`. No changes to `Main.java` are required.
+
+### Adding New MCP Providers
+
+1. Create a new module implementing `McpProvider` from `jmcp-core`
+2. Declare the provider in `module-info.java`:
+   ```java
+   provides org.peacetalk.jmcp.core.McpProvider
+       with com.example.MyMcpProvider;
+   ```
+3. Add the module as a `runtime` dependency of `jmcp-server`
+4. Add a config section in `~/.jmcp/config.json` keyed by the module name
+
+The provider's `initialize(Map<String, Object> config)` receives its config section.
+Throw `IllegalStateException` or `IOException` if the config is missing or invalid —
+the server will print the full stack trace and exit.
 
 ## Performance Considerations
 

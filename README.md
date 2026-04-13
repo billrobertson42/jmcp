@@ -43,12 +43,14 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 
 ## Available Tools
 
-1. **query** - Execute SQL SELECT queries
-2. **list-tables** - List tables in a schema
-3. **list-schemas** - List all schemas/databases
-4. **describe-table** - Get table structure, columns, indexes
-5. **preview-table** - Preview first N rows of a table
-6. **get-row-count** - Get row count for a table
+| Tool | Description |
+|------|-------------|
+| **query** | Execute a read-only SELECT query (up to 1000 rows) |
+| **explain-query** | Get the execution plan for a SELECT query |
+| **get-row-count** | Get the exact row count for a table |
+| **sample-data** | Get sample rows from a table (`first`, `random`, or `last`; max 100) |
+| **analyze-column** | Analyze a column: distinct count, nulls, min/max, top values |
+| **resource-proxy** | Workaround for clients without MCP resource support — exposes resources via the tools API |
 
 ## Architecture
 
@@ -59,23 +61,47 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 └─────────────┘         └──────────────┘         └──────────────┘
 ```
 
+The server uses JPMS ServiceLoader (SPI) to discover transport and provider modules at
+runtime. `jmcp-server` has **zero compile-time knowledge** of `jmcp-jdbc` or
+`jmcp-transport-stdio` — they are runtime dependencies only.
+
 ## Configuration
 
-Create `config.json` in the project root:
+The server reads a single JSON config file and routes each top-level section to the
+corresponding provider by JPMS module name. Create `~/.jmcp/config.json`:
 
 ```json
 {
-  "connections": [
-    {
-      "id": "mydb",
-      "databaseType": "postgresql",
-      "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
-      "username": "user",
-      "password": "pass"
-    }
-  ]
+  "org.peacetalk.jmcp.jdbc": {
+    "default_id": "mydb",
+    "expose_urls": false,
+    "connections": [
+      {
+        "id": "mydb",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
+        "username": "user",
+        "password": "pass"
+      }
+    ]
+  }
 }
 ```
+
+### Config file search order
+
+1. System property: `-Djmcp.config=/path/to/config.json`
+2. Default location: `~/.jmcp/config.json`
+3. Environment variable: `JMCP_CONFIG` (JSON string, not a file path)
+
+### Fail-fast initialization
+
+If a provider's `initialize()` throws — missing config, bad credentials, unreachable
+database — the server prints the full stack trace and exits immediately. It will not
+start in a degraded state.
+
+Providers may also use their own configuration mechanisms (system properties,
+environment variables, etc.) in addition to the server-supplied config map.
 
 ## Building
 
