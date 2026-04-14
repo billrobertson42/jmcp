@@ -9,6 +9,18 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
+    <name>JDBC MCP Server</name>
+    <description>A Model Context Protocol (MCP) server providing read-only access to JDBC-compatible databases.</description>
+    <url>https://github.com/peacetalk/jmcp</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
     <modules>
         <module>jmcp-core</module>
         <module>jmcp-transport-stdio</module>

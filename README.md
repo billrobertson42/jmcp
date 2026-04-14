@@ -21,7 +21,7 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 - 🔒 **Read-Only** - Enforced at multiple layers (SQL validation, connection configuration)
 - 🔌 **Dynamic Drivers** - JDBC drivers loaded on-demand from Maven Central
 - 🏗️ **Modular Architecture** - Clean JPMS module structure
-- 🚀 **Zero Dependencies** - No Spring, minimal CVE surface
+- 🚀 **Minimal Dependencies** - No Spring, minimal CVE surface
 - 📦 **jlink Ready** - Build custom JVMs with only needed components
 
 ### Client
@@ -160,7 +160,7 @@ The server enforces read-only access through:
 
 ## License
 
-Apache 2.0 (or your chosen license)
+This project is licensed under the [Apache License, Version 2.0](LICENSE).
 
 ## Contributing
 
