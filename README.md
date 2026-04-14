@@ -17,19 +17,19 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 ## Features
 
 ### Server
-- 🗄️ **Multiple Databases** - Connect to PostgreSQL, MySQL, Oracle, SQL Server, H2, Derby, SQLite
-- 🔒 **Read-Only** - Enforced at multiple layers (SQL validation, connection configuration)
-- 🔌 **Dynamic Drivers** - JDBC drivers loaded on-demand from Maven Central
-- 🏗️ **Modular Architecture** - Clean JPMS module structure
-- 🚀 **Minimal Dependencies** - No Spring, minimal CVE surface
-- 📦 **jlink Ready** - Build custom JVMs with only needed components
+- **Multiple Databases** - Connect to PostgreSQL, MySQL, Oracle, SQL Server, H2, Derby, SQLite
+- **The "Semantic Firewall"** - JSqlParser formally validates queries instead of relying on connection limits. Returning specific violations enables LLM self-correction for vastly improved success-per-prompt rates.
+- **Dynamic Drivers** - JDBC drivers loaded on-demand from Maven Central
+- **Modular Architecture** - Clean JPMS module structure utilizing SPI for extensible providers and zero compile-time dependencies.
+- **Minimal Dependencies** - No Spring, minimal CVE surface
+- **jlink Ready** - Build custom JVMs with only needed components
 
 ### Client
-- 🖥️ **JavaFX GUI** - Modern, responsive interface
-- 🛠️ **Tool Discovery** - Automatically list server tools
-- 📝 **Dynamic Forms** - Auto-generated input forms from schemas
-- 📄 **Pretty JSON** - Formatted result display
-- 🔌 **Any MCP Server** - Works with any MCP-compatible server
+- **JavaFX GUI** - Modern, responsive interface
+- **Tool Discovery** - Automatically list server tools
+- **Dynamic Forms** - Auto-generated input forms from schemas
+- **Pretty JSON** - Formatted result display
+- **Any MCP Server** - Works with any MCP-compatible server that uses the stdio transport
 
 ## Modules
 
@@ -50,9 +50,15 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 | **get-row-count** | Get the exact row count for a table |
 | **sample-data** | Get sample rows from a table (`first`, `random`, or `last`; max 100) |
 | **analyze-column** | Analyze a column: distinct count, nulls, min/max, top values |
-| **resource-proxy** | Workaround for clients without MCP resource support — exposes resources via the tools API |
+| **resource-proxy** | A crucial workaround for clients without MCP resource support (like some IDE Copilots) — exposes robust database resource navigation directly via the tools API |
 
-## Architecture
+## "Human-in-the-Loop" Architecture & Testing
+
+While this project accelerates development via AI assistance, its core value is the intentional, human-driven architecture. 
+- **JPMS & SPI:** The server uses JPMS ServiceLoader (SPI) to discover transport and provider modules at
+runtime. `jmcp-server` has **zero compile-time knowledge** of `jmcp-jdbc` or
+`jmcp-transport-stdio` — they are runtime dependencies only. This makes the validation strategy highly pluggable.
+- **Robust Test Suite:** We maintain hundreds of test cases verifying the Semantic Firewall logic against basic DML/DDL rejection, complex bypass attempts, and dialect-specific edge cases to give enterprise users confidence.
 
 ```
 ┌─────────────┐         ┌──────────────┐         ┌──────────────┐
@@ -152,11 +158,11 @@ The server enforces read-only access through:
 
 ## Documentation
 
-- [Architecture](claude/ARCHITECTURE.md)
-- [MCP Client GUI](claude/MCP_CLIENT_GUI.md)
-- [SQL Validation](claude/SQL_VALIDATION_EXECUTIVE_SUMMARY.md)
-- [Dependency Graph](claude/DEPENDENCY_GRAPH.md)
-- [Test Documentation](claude/COMPREHENSIVE_TEST_SUITE_SUMMARY.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [MCP Client GUI](docs/MCP_CLIENT_GUI.md)
+- [SQL Validation](docs/SQL_VALIDATION_EXECUTIVE_SUMMARY.md)
+- [Dependency Graph](docs/DEPENDENCY_GRAPH.md)
+- [Test Documentation](docs/COMPREHENSIVE_TEST_SUITE_SUMMARY.md)
 
 ## License
 
@@ -165,4 +171,3 @@ This project is licensed under the [Apache License, Version 2.0](LICENSE).
 ## Contributing
 
 This is a reference implementation. Feel free to fork and adapt for your needs.
-
