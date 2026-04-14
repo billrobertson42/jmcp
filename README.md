@@ -2,7 +2,34 @@
 
 A Model Context Protocol (MCP) server that provides read-only access to JDBC-compatible databases.
 
+It also provides a framework that allows easy addition of other tools.
+
+## Key Ideas
+
+* Safety 
+  * Don't allow the database tools to make changes, AI makes mistakes, and sometimes you can't control permissions.
+  * Minimal external dependencies - Reduce the CVE surface
+* Extensibility
+  * You should be able to add other tool/resource providers easily.
+* Modern Java
+  * Latest LTS JVM
+  * Take advantage of its features
+
 ## Quick Start
+
+There are a couple of basic starter scripts that should run the mcp after a maven build. You can easily see what it does by running the client.
+
+### Build it
+
+Requires Java 25 and a recent version of maven. 
+
+```bash
+mvn package
+```
+
+### Create Configuration File
+
+See the Configuration section below for an example conifig file. 
 
 ### Run the Server
 ```bash
@@ -17,21 +44,26 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 ## Features
 
 ### Server
-- 🗄️ **Multiple Databases** - Connect to PostgreSQL, MySQL, Oracle, SQL Server, H2, Derby, SQLite
-- 🔒 **Read-Only** - Enforced at multiple layers (SQL validation, connection configuration)
-- 🔌 **Dynamic Drivers** - JDBC drivers loaded on-demand from Maven Central
-- 🏗️ **Modular Architecture** - Clean JPMS module structure
-- 🚀 **Minimal Dependencies** - No Spring, minimal CVE surface
-- 📦 **jlink Ready** - Build custom JVMs with only needed components
+- **Multiple Databases** - Connect to PostgreSQL, MySQL, Oracle, SQL Server, H2, SQLite
+- **The "Semantic Firewall"** - JSqlParser validates that queries are in-fact queries, and therefore read-only, instead of relying on connection limits. Returning specific violations enables LLM self-correction for better success-per-prompt rates.
+- **Dynamic Drivers** - JDBC drivers loaded on-demand from Maven Central
+- **Modular Architecture** - Clean JPMS module structure utilizing SPI for extensible providers and zero compile-time dependencies.
+- **Minimal Dependencies** - No Spring, minimal CVE surface
+- **jlink Ready** - Build custom JVMs with only needed components
 
 ### Client
-- 🖥️ **JavaFX GUI** - Modern, responsive interface
-- 🛠️ **Tool Discovery** - Automatically list server tools
-- 📝 **Dynamic Forms** - Auto-generated input forms from schemas
-- 📄 **Pretty JSON** - Formatted result display
-- 🔌 **Any MCP Server** - Works with any MCP-compatible server
+
+The client should be able to run any mcp that uses the stdio transport. It's extremely helpful for debugging and building understanding of the mcp protocol.
+
+- **JavaFX GUI** - Modern, responsive interface
+- **Tool Discovery** - Automatically list server tools
+- **Dynamic Forms** - Auto-generated input forms from schemas
+- **Pretty JSON** - Formatted result display
+- **Any MCP Server** - Works with any MCP-compatible server that uses the stdio transport
 
 ## Modules
+
+These are the JPMS modules currently included. If you wanted to add your own tools, you would create a module that is an mcp provider.
 
 | Module | Purpose |
 |--------|---------|
@@ -50,25 +82,42 @@ A Model Context Protocol (MCP) server that provides read-only access to JDBC-com
 | **get-row-count** | Get the exact row count for a table |
 | **sample-data** | Get sample rows from a table (`first`, `random`, or `last`; max 100) |
 | **analyze-column** | Analyze a column: distinct count, nulls, min/max, top values |
-| **resource-proxy** | Workaround for clients without MCP resource support — exposes resources via the tools API |
+| **resource-proxy** | A crucial workaround for clients without MCP resource support (like some IDE Copilots) — exposes robust database resource navigation directly via the tools API |
 
-## Architecture
+## Available Resources
 
-```
-┌─────────────┐         ┌──────────────┐         ┌──────────────┐
-│   Client    │ stdio   │    Server    │  JDBC   │   Database   │
-│   (GUI)     │◄───────►│  (MCP)       │◄───────►│  (Any JDBC)  │
-└─────────────┘         └──────────────┘         └──────────────┘
-```
+Resources provide navigable, HATEOAS-like access to database metadata. Start at `db://context` for a complete overview and follow the URIs to explore deeper.
 
-The server uses JPMS ServiceLoader (SPI) to discover transport and provider modules at
-runtime. `jmcp-server` has **zero compile-time knowledge** of `jmcp-jdbc` or
-`jmcp-transport-stdio` — they are runtime dependencies only.
+| Resource URI Pattern | Description |
+|------|-------------|
+| `db://context` | Complete database overview — the recommended starting point |
+| `db://connections` | List all configured connections |
+| `db://connection/{id}` | Details for a specific connection |
+| `db://connection/{id}/schemas` | List schemas for a connection |
+| `db://connection/{id}/schema/{name}` | Schema details (tables, views, procedures) |
+| `db://connection/{id}/schema/{name}/tables` | List tables in a schema |
+| `db://connection/{id}/schema/{name}/table/{name}` | Table metadata (columns, indexes, FKs, constraints) |
+| `db://connection/{id}/schema/{name}/views` | List views in a schema |
+| `db://connection/{id}/schema/{name}/view/{name}` | View definition and metadata |
+| `db://connection/{id}/schema/{name}/procedure/{name}` | Procedure/function signature and parameters |
+| `db://connection/{id}/schema/{name}/relationships` | Schema-wide foreign key relationships |
+| `db://connection/{id}/schema/{name}/table/{name}/relationships` | Foreign key relationships for a specific table |
+
+> **Note:** Clients that don't support the MCP resources protocol (e.g., some IDE Copilots) can access all resources via the resource-proxy tool.
+
+## "Human-in-the-Loop" Architecture & Testing
+
+While this project accelerates development via AI assistance, its core value is the intentional, human-driven architecture. 
+- **JPMS & SPI:** The server uses JPMS ServiceLoader (SPI) to discover transport and provider modules at
+runtime. `jmcp-server` has no compile-time knowledge of specific tools or transports like `jmcp-jdbc` or
+`jmcp-transport-stdio` — they are runtime dependencies only. 
+- **Test Suite:** There are hundreds of test cases that the Semantic Firewall logic against basic DML/DDL rejection, complex bypass attempts, and dialect-specific edge cases to give users confidence.
+
 
 ## Configuration
 
 The server reads a single JSON config file and routes each top-level section to the
-corresponding provider by JPMS module name. Create `~/.jmcp/config.json`:
+corresponding provider by JPMS module name. Create file at its default location for a quick start: `~/.jmcp/config.json`:
 
 ```json
 {
@@ -92,77 +141,40 @@ corresponding provider by JPMS module name. Create `~/.jmcp/config.json`:
 
 1. System property: `-Djmcp.config=/path/to/config.json`
 2. Default location: `~/.jmcp/config.json`
-3. Environment variable: `JMCP_CONFIG` (JSON string, not a file path)
 
 ### Fail-fast initialization
 
 If a provider's `configure()` throws — missing config, bad credentials, unreachable
 database — the server prints the full stack trace and exits immediately. It will not
-start in a degraded state.
+start in a degraded state. Providers must throw if they cannot be configured correctly.
 
 Providers may also use their own configuration mechanisms (system properties,
 environment variables, etc.) in addition to the server-supplied config map.
 
-## Building
-
-```bash
-# Build all modules
-mvn clean package
-
-# Build without tests
-mvn clean package -DskipTests
-
-# Build specific module
-mvn clean package -pl jmcp-client -am
-```
-
-## Running
-
-### Server
-```bash
-./run.sh
-```
-
-### Client
-```bash
-./run-client.sh
-```
-
-Or with Maven:
-```bash
-# Server
-mvn -q -pl jmcp-server exec:java -Dexec.mainClass="org.peacetalk.jmcp.server.Main"
-
-# Client
-mvn -pl jmcp-client javafx:run
-```
 
 ## Requirements
 
 - Java 25+
 - Maven 3.9+
-- JDBC drivers (auto-downloaded as needed)
+- Network access to Maven Central: JDBC drivers are downloaded as needed
 
 ## Security
 
 The server enforces read-only access through:
-1. **SQL Validation** - JSqlParser validates queries before execution
+1. **SQL Validation** - JSqlParser validates queries before execution, they must be read-only.
 2. **Read-Only Connections** - HikariCP configured for read-only
-3. **Connection-Level** - Database users should have SELECT-only privileges
+
+Additionally, database users should have SELECT-only privileges. 
 
 ## Documentation
 
-- [Architecture](claude/ARCHITECTURE.md)
-- [MCP Client GUI](claude/MCP_CLIENT_GUI.md)
-- [SQL Validation](claude/SQL_VALIDATION_EXECUTIVE_SUMMARY.md)
-- [Dependency Graph](claude/DEPENDENCY_GRAPH.md)
-- [Test Documentation](claude/COMPREHENSIVE_TEST_SUITE_SUMMARY.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [MCP Client GUI](docs/MCP_CLIENT_GUI.md)
+- [SQL Validation](docs/SQL_VALIDATION_EXECUTIVE_SUMMARY.md)
+- [Dependency Graph](docs/DEPENDENCY_GRAPH.md)
+- [Test Documentation](docs/COMPREHENSIVE_TEST_SUITE_SUMMARY.md)
 
 ## License
 
 This project is licensed under the [Apache License, Version 2.0](LICENSE).
-
-## Contributing
-
-This is a reference implementation. Feel free to fork and adapt for your needs.
 

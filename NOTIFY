@@ -1,0 +1,12 @@
+Model Context Protocol (MCP) JDBC Server
+Copyright 2026
+
+AI Assistance Disclosure
+========================
+This project contains code that was generated with the assistance of Artificial Intelligence (AI) models.
+
+- Models Used: Gemini, Claude (and other LLMs used during development)
+- Nature of Human Oversight: The architectural design, structural patterns (such as JPMS modularity and SPI usage), and the implementation of the "Semantic Firewall" pattern using JSqlParser were conceived, directed, and iteratively refined by human developers. All AI-generated output was reviewed, modified, and comprehensively tested by a human to ensure correctness, security, and adherence to the Apache 2.0 licensing structure.
+
+This hybrid "Human-in-the-Loop" approach combines AI-accelerated boilerplate generation with human-led system architecture and rigorous test coverage.
+
