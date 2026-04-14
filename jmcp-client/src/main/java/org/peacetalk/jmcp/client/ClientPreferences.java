@@ -3,11 +3,15 @@ package org.peacetalk.jmcp.client;
 import java.util.Optional;
 import java.util.prefs.Preferences;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 /**
  * Manages user preferences for the MCP Client.
  * Provides a clean API without requiring null checks throughout the code.
  */
 public class ClientPreferences {
+    private static final Logger LOG = LogManager.getLogger(ClientPreferences.class);
     private static final String PREF_SERVER_COMMAND = "server.command";
 
     private final Preferences preferences;
@@ -46,9 +50,7 @@ public class ClientPreferences {
         try {
             preferences.clear();
         } catch (Exception e) {
-            // Log but don't fail - preferences may not exist or be corrupted
-            System.err.println("Error clearing preferences: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Error clearing preferences: {}", e.getMessage(), e);
         }
     }
 }

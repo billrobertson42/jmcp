@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.core.protocol;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
@@ -14,6 +16,7 @@ import java.util.Map;
  * Uses a HashMap for O(1) method dispatch instead of linear search.
  */
 public class McpServer implements McpRequestHandler {
+    private static final Logger LOG = LogManager.getLogger(McpServer.class);
     private final ObjectMapper objectMapper;
     private final Map<String, McpProtocolHandler> methodHandlers;
 
@@ -55,8 +58,7 @@ public class McpServer implements McpRequestHandler {
             JsonRpcResponse response = processRequest(request);
             return objectMapper.writeValueAsString(response);
         } catch (Exception e) {
-            System.err.println("Failed to parse request: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Failed to parse request: {}", e.getMessage(), e);
             JsonRpcResponse errorResponse = JsonRpcResponse.error(
                 null,
                 JsonRpcError.parseError("Failed to parse request: " + e.getMessage())
@@ -64,8 +66,7 @@ public class McpServer implements McpRequestHandler {
             try {
                 return objectMapper.writeValueAsString(errorResponse);
             } catch (Exception ex) {
-                System.err.println("Failed to serialize error response: " + ex.getMessage());
-                ex.printStackTrace(System.err);
+                LOG.error("Failed to serialize error response: {}", ex.getMessage(), ex);
                 return "{\"jsonrpc\":\"2.0\",\"id\":null,\"error\":{\"code\":-32700,\"message\":\"Parse error\"}}";
             }
         }
@@ -79,17 +80,14 @@ public class McpServer implements McpRequestHandler {
         McpProtocolHandler handler = methodHandlers.get(request.method());
 
         if (handler == null) {
-            // Unknown notification - just log and ignore (per JSON-RPC spec)
-            System.err.println("Received unknown notification: " + request.method());
+            LOG.warn("Received unknown notification: {}", request.method());
             return;
         }
 
         try {
             handler.handle(request);
         } catch (Exception e) {
-            // Log but don't return error for notifications
-            System.err.println("Error handling notification '" + request.method() + "': " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Error handling notification '{}': {}", request.method(), e.getMessage(), e);
         }
     }
 
@@ -106,8 +104,7 @@ public class McpServer implements McpRequestHandler {
         try {
             return handler.handle(request);
         } catch (Exception e) {
-            System.err.println("Error handling request '" + request.method() + "': " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Error handling request '{}': {}", request.method(), e.getMessage(), e);
             return JsonRpcResponse.error(
                 request.id(),
                 JsonRpcError.internalError("Error handling request: " + e.getMessage())
@@ -115,5 +112,4 @@ public class McpServer implements McpRequestHandler {
         }
     }
 }
-
 

@@ -96,7 +96,7 @@ corresponding provider by JPMS module name. Create `~/.jmcp/config.json`:
 
 ### Fail-fast initialization
 
-If a provider's `initialize()` throws — missing config, bad credentials, unreachable
+If a provider's `configure()` throws — missing config, bad credentials, unreachable
 database — the server prints the full stack trace and exits immediately. It will not
 start in a degraded state.
 

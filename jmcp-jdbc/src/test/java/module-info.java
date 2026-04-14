@@ -9,5 +9,6 @@ open module org.peacetalk.jmcp.jdbc.test {
     requires com.h2database;
     requires com.networknt.schema;
     requires org.snakeyaml.engine.v2;
+    requires org.apache.logging.log4j;
 }
 

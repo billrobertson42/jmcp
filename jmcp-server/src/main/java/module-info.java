@@ -1,6 +1,7 @@
 module org.peacetalk.jmcp.server {
     requires org.peacetalk.jmcp.core;
     requires tools.jackson.databind;
+    requires org.apache.logging.log4j;
 
     // SPI consumption — server discovers providers at runtime
     uses org.peacetalk.jmcp.core.McpProvider;

@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.core.protocol;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.model.*;
 
 import java.util.Map;
@@ -14,12 +16,13 @@ import java.util.Set;
  * - ping: Health check
  */
 public class InitializationHandler implements McpProtocolHandler {
+    private static final Logger LOG = LogManager.getLogger(InitializationHandler.class);
     private static final String VERSION = "1.0.0";
     private static final String PROTOCOL_VERSION = "2024-11-05";
 
     private final boolean hasTools;
     private final boolean hasResources;
-    private volatile boolean initialized = false;
+    private boolean initialized = false;
 
     /**
      * Create a handler that advertises dynamic capabilities based on what
@@ -83,9 +86,9 @@ public class InitializationHandler implements McpProtocolHandler {
      * This signals that the client is ready to receive requests.
      * No response is sent for notifications.
      */
-    private JsonRpcResponse handleInitialized(JsonRpcRequest request) {
+    private synchronized JsonRpcResponse handleInitialized(JsonRpcRequest request) {
         initialized = true;
-        System.err.println("Client initialized notification received");
+        LOG.info("Client initialized notification received");
         // Notifications don't get responses, but we return null which McpServer handles
         return null;
     }
@@ -101,8 +104,7 @@ public class InitializationHandler implements McpProtocolHandler {
     /**
      * Check if the client has sent the initialized notification.
      */
-    public boolean isInitialized() {
+    public synchronized boolean isInitialized() {
         return initialized;
     }
 }
-

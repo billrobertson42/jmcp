@@ -123,7 +123,7 @@ class ToolsHandlerTest {
         }
 
         @Override
-        public void initialize(java.util.Map<String, Object> config) {}
+        public void configure(java.util.Map<String, Object> config) {}
 
         @Override
         public List<Tool> getTools() {

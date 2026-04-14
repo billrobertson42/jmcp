@@ -4,6 +4,7 @@ module org.peacetalk.jmcp.client {
     requires javafx.fxml;
     requires tools.jackson.databind;
     requires java.prefs;
+    requires org.apache.logging.log4j;
 
     exports org.peacetalk.jmcp.client;
     opens org.peacetalk.jmcp.client to javafx.fxml;

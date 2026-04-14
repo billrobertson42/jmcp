@@ -25,12 +25,12 @@ import java.util.Map;
  * is an error is determined by the provider — providers that require
  * configuration must throw.
  *
- * The centralized config mechanism does not prohi * The centralfrom
- * supp * supp * supp * supp * supp * supp * supp ces (system properties,
- * environment variables, etc.).
+ * The centralized config mechanism does not prohibit providers from supplying
+ * additional configuration sources (system properties, environment variables, etc.).
  *
- * <h2>Erro * <h2>Erro * <h * Implementations MUST throw if initialization cannot complete
- * successfully. A provider that initializes without error is expected
+ * <h2>Error Handling</h2>
+ * Implementations MUST throw if initialization cannot complete
+ * successfully. A provider that configures without error is expected
  * to be fully functional. Do not swallow errors or fall back to a
  * degraded state silently. Use standard JDK exception types
  * (e.g., {@link IllegalStateException}, {@link java.io.IOException}).
@@ -38,6 +38,7 @@ import java.util.Map;
 public interface McpProvider {
     /** Human-readable name for this provider */
     String getName();
+
     /**
      * Initialize the provider with the given configuration.
      *
@@ -48,11 +49,12 @@ public interface McpProvider {
      *               require configuration must throw an appropriate
      *               exception (e.g., IllegalStateException) when config
      *               is null or insufficient.
-     * @throws Exception if initialization fails for any reason. The
+     * @throws Exception if configuration fails for any reason. The
      *                   server will log the exception, print the full
      *                   stack trace, and terminate.
      */
-    void initialize(Map<String, Object> config) throws Exception;
+    void configure(Map<String, Object> config) throws Exception;
+
     /**
      * Get all tools from this provider.
      * Returns empty list if this provider has no tools.
@@ -60,6 +62,7 @@ public interface McpProvider {
     default List<Tool> getTools() {
         return Collections.emptyList();
     }
+
     /**
      * Get the resource provider, if this provider supports resources.
      * Returns null if this provider has no resources.
@@ -67,7 +70,7 @@ public interface McpProvider {
     default ResourceProvider getResourceProvider() {
         return null;
     }
-    // Future: default PromptProvider getPromptProvider() { return null; }
+
     /** Clean up resources used by this provider */
     void shutdown();
 }

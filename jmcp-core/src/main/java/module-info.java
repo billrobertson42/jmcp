@@ -3,6 +3,7 @@ module org.peacetalk.jmcp.core {
     requires tools.jackson.core;
     requires jakarta.validation;
     requires org.hibernate.validator;
+    requires org.apache.logging.log4j;
 
     exports org.peacetalk.jmcp.core.model;
     exports org.peacetalk.jmcp.core.protocol;

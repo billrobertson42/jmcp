@@ -8,7 +8,6 @@ import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.jdbc.JdbcMcpProvider;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -50,14 +49,14 @@ class JdbcMcpProviderTest {
 
     @Test
     void testProviderInitialization() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         assertNotNull(provider);
     }
 
     @Test
     void testNullConfigThrows() {
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-            () -> provider.initialize(null));
+            () -> provider.configure(null));
         assertTrue(ex.getMessage().contains("requires configuration"),
             "Error message should mention configuration requirement");
     }
@@ -68,14 +67,14 @@ class JdbcMcpProviderTest {
             "connections", List.of()
         );
         IllegalStateException ex = assertThrows(IllegalStateException.class,
-            () -> provider.initialize(config));
+            () -> provider.configure(config));
         assertTrue(ex.getMessage().contains("no connections"),
             "Error message should mention no connections");
     }
 
     @Test
     void testGetName() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         String name = provider.getName();
         assertNotNull(name);
         assertFalse(name.isBlank());
@@ -83,7 +82,7 @@ class JdbcMcpProviderTest {
 
     @Test
     void testGetTools() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
 
         List<Tool> tools = provider.getTools();
         assertNotNull(tools);
@@ -97,25 +96,25 @@ class JdbcMcpProviderTest {
 
     @Test
     void testGetResourceProvider() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         assertNotNull(provider.getResourceProvider());
     }
 
     @Test
     void testShutdown() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         assertDoesNotThrow(() -> provider.shutdown());
     }
 
     @Test
     void testMultipleInitializations() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         List<Tool> tools1 = provider.getTools();
 
         provider.shutdown();
 
         provider = new JdbcMcpProvider();
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test2"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test2"));
         List<Tool> tools2 = provider.getTools();
 
         assertEquals(tools1.size(), tools2.size());
@@ -134,7 +133,7 @@ class JdbcMcpProviderTest {
             )
         );
 
-        provider.initialize(config);
+        provider.configure(config);
 
         List<Tool> tools = provider.getTools();
         assertFalse(tools.isEmpty());
@@ -142,7 +141,7 @@ class JdbcMcpProviderTest {
 
     @Test
     void testToolsHaveSchemas() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         for (Tool tool : provider.getTools()) {
             assertNotNull(tool.getInputSchema(),
                 "Tool " + tool.getName() + " should have input schema");
@@ -151,7 +150,7 @@ class JdbcMcpProviderTest {
 
     @Test
     void testToolsHaveDescriptions() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         for (Tool tool : provider.getTools()) {
             String description = tool.getDescription();
             assertNotNull(description, "Tool " + tool.getName() + " should have description");
@@ -161,7 +160,7 @@ class JdbcMcpProviderTest {
 
     @Test
     void testToolsHaveNames() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         for (Tool tool : provider.getTools()) {
             String name = tool.getName();
             assertNotNull(name);
@@ -177,7 +176,7 @@ class JdbcMcpProviderTest {
 
     @Test
     void testToolNamesUnique() throws Exception {
-        provider.initialize(h2Config("test-db", "jdbc:h2:mem:test"));
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
         List<Tool> tools = provider.getTools();
         List<String> names = tools.stream().map(Tool::getName).toList();
         assertEquals(names.size(), names.stream().distinct().count(),

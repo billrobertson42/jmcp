@@ -26,7 +26,7 @@ public class ServerToolProvider implements McpProvider {
     }
 
     @Override
-    public void initialize(Map<String, Object> config) {
+    public void configure(Map<String, Object> config) {
         // No initialization needed — resource proxy is fully configured at construction
     }
 

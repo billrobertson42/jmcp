@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.transport.stdio;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.transport.McpRequestHandler;
 import org.peacetalk.jmcp.core.transport.McpTransport;
 
@@ -14,6 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Reads JSON-RPC requests from stdin and writes responses to stdout.
  */
 public class StdioTransport implements McpTransport {
+    private static final Logger LOG = LogManager.getLogger(StdioTransport.class);
     private final AtomicBoolean running = new AtomicBoolean(false);
     private Thread readerThread;
 
@@ -46,7 +49,7 @@ public class StdioTransport implements McpTransport {
                 }
             } catch (IOException e) {
                 if (running.get()) {
-                    System.err.println("Error reading from stdin: " + e.getMessage());
+                    LOG.error("Error reading from stdin: {}", e.getMessage(), e);
                 }
             }
         }, "stdio-transport-reader");
@@ -68,4 +71,3 @@ public class StdioTransport implements McpTransport {
         return running.get();
     }
 }
-

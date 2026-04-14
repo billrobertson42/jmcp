@@ -2,8 +2,8 @@ module org.peacetalk.jmcp.jdbc {
     requires org.peacetalk.jmcp.core;
     requires java.sql;
     requires tools.jackson.databind;
-    requires jdbctl;
     requires net.sf.jsqlparser;
+    requires org.apache.logging.log4j;
 
     // Public API - only what external modules (jmcp-server) need
     exports org.peacetalk.jmcp.jdbc;

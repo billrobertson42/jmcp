@@ -1,5 +1,8 @@
 package org.peacetalk.jmcp.jdbc.driver;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -15,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Manages dynamic loading of JDBC drivers from Maven Central
  */
 public class JdbcDriverManager {
+    private static final Logger LOG = LogManager.getLogger(JdbcDriverManager.class);
 
     // HikariCP version to use with all drivers (6.x for Java 11+, 7.x requires Java 21+)
     private static final MavenCoordinates HIKARI_CP =
@@ -87,13 +91,13 @@ public class JdbcDriverManager {
         }
 
         String url = coordinates.getMavenCentralUrl();
-        System.err.println("Downloading driver from: " + url);
+        LOG.info("Downloading driver from: {}", url);
 
         try (InputStream in = new URL(url).openStream()) {
             Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
         }
 
-        System.err.println("Driver downloaded to: " + targetPath);
+        LOG.info("Driver downloaded to: {}", targetPath);
         return targetPath;
     }
 
@@ -139,4 +143,3 @@ public class JdbcDriverManager {
         }
     }
 }
-

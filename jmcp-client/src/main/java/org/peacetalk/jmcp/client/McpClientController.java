@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.client;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.fxml.FXML;
@@ -33,6 +35,7 @@ import java.util.Map;
  * Coordinates between UI components and services.
  */
 public class McpClientController {
+    private static final Logger LOG = LogManager.getLogger(McpClientController.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     // UI Components - Tools
@@ -199,7 +202,7 @@ public class McpClientController {
                     ListResourcesResult resourcesResult = mcpService.listResources();
                     resources = mcpService.sortResources(resourcesResult.resources());
                 } catch (Exception e) {
-                    System.err.println("Resources not available: " + e.getMessage());
+                    LOG.warn("Resources not available: {}", e.getMessage());
                     // Resources are optional - continue without them
                 }
                 final List<ResourceDescriptor> finalResources = resources;
@@ -216,8 +219,7 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
-                System.err.println("Connection failed: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Connection failed: {}", e.getMessage(), e);
                 Platform.runLater(() -> {
                     showError("Connection failed: " + e.getMessage());
                     statusLabel.setText("Disconnected");
@@ -248,10 +250,8 @@ public class McpClientController {
             try {
                 mcpService.disconnect();
             } catch (Exception e) {
-                System.err.println("Error during disconnect: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Error during disconnect: {}", e.getMessage(), e);
             } finally {
-                // ALWAYS update UI, even if disconnect failed
                 cleanupAndResetUI();
             }
         });
@@ -267,7 +267,7 @@ public class McpClientController {
 
                 // If thread is still alive after 5 seconds, force UI reset anyway
                 if (disconnectThread.isAlive()) {
-                    System.err.println("WARNING: Disconnect operation timed out after 5 seconds - forcing UI reset");
+                    LOG.warn("Disconnect operation timed out after 5 seconds - forcing UI reset");
                     cleanupAndResetUI();
                 }
             } catch (InterruptedException e) {
@@ -340,8 +340,7 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
-                System.err.println("Ping error: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Ping error: {}", e.getMessage(), e);
                 Platform.runLater(() -> {
                     statusLabel.setText("Connected - Ping error");
                     showError("Ping failed: " + e.getMessage());
@@ -363,18 +362,16 @@ public class McpClientController {
             try {
                 mcpService.cleanup();
             } catch (Exception e) {
-                System.err.println("Error during cleanup: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Error during cleanup: {}", e.getMessage(), e);
             }
         });
         cleanupThread.setDaemon(true);
         cleanupThread.start();
 
-        // Give it 2 seconds max, then exit anyway
         try {
             cleanupThread.join(2000);
             if (cleanupThread.isAlive()) {
-                System.err.println("WARNING: Cleanup timed out after 2 seconds - forcing exit");
+                LOG.warn("Cleanup timed out after 2 seconds - forcing exit");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -395,8 +392,7 @@ public class McpClientController {
             fullDescription.append("\n\n--- Input Schema ---\n");
             fullDescription.append(prettySchema);
         } catch (Exception e) {
-            System.err.println("Error displaying schema for tool " + tool.name() + ": " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Error displaying schema for tool {}: {}", tool.name(), e.getMessage(), e);
             fullDescription.append("\n\nError displaying schema: ").append(e.getMessage());
         }
 
@@ -465,8 +461,7 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
-                System.err.println("Resource read failed: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Resource read failed: {}", e.getMessage(), e);
                 Platform.runLater(() -> {
                     showError("Resource read failed: " + e.getMessage());
                     navigableResourceView.setContent("Error: " + e.getMessage());
@@ -619,8 +614,7 @@ public class McpClientController {
                 });
 
             } catch (Exception e) {
-                System.err.println("Error executing tool: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Error executing tool: {}", e.getMessage(), e);
                 Platform.runLater(() -> {
                     resultArea.setText("Error: " + e.getMessage());
                     executeButton.setDisable(false);

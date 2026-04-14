@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.client.service;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.client.CommunicationListener;
 import org.peacetalk.jmcp.client.McpClient;
 import org.peacetalk.jmcp.core.model.CallToolResult;
@@ -19,6 +21,7 @@ import java.util.Map;
  * Designed to support multiple MCP connections in the future.
  */
 public class McpService {
+    private static final Logger LOG = LogManager.getLogger(McpService.class);
     private McpClient client;
 
     /**
@@ -182,7 +185,7 @@ public class McpService {
         try {
             return client.ping();
         } catch (Exception e) {
-            System.err.println("Ping failed: " + e.getMessage());
+            LOG.warn("Ping failed: {}", e.getMessage());
             return false;
         }
     }

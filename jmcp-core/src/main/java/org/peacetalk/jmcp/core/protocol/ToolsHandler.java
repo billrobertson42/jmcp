@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.core.protocol;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.core.model.*;
@@ -13,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Generic MCP protocol handler for tools provided by McpProviders.
+ * Generic MCP protocol handler for tools provided by ToolProviders.
  * This handler aggregates tools from multiple providers and handles
  * tools/list and tools/call requests.
  *
@@ -21,6 +23,7 @@ import java.util.Set;
  * during provider registration.
  */
 public class ToolsHandler implements McpProtocolHandler {
+    private static final Logger LOG = LogManager.getLogger(ToolsHandler.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<McpProvider> toolProviders;
@@ -37,7 +40,6 @@ public class ToolsHandler implements McpProtocolHandler {
      * Builds an index of tool names for O(1) lookup during tool calls.
      *
      * @param provider The provider to register
-     * @throws IllegalStateException if a tool with duplicate name is registered
      */
     public void registerProvider(McpProvider provider) {
         toolProviders.add(provider);
@@ -69,8 +71,7 @@ public class ToolsHandler implements McpProtocolHandler {
                 default -> JsonRpcResponse.error(request.id(), JsonRpcError.methodNotFound(request.method()));
             };
         } catch (Exception e) {
-            System.err.println("Error handling request: " + request.method());
-            e.printStackTrace(System.err);
+            LOG.error("Error handling request: {}", request.method(), e);
             return JsonRpcResponse.error(request.id(), JsonRpcError.internalError(e.getMessage()));
         }
     }
@@ -78,7 +79,6 @@ public class ToolsHandler implements McpProtocolHandler {
     private JsonRpcResponse handleListTools(JsonRpcRequest request) {
         List<org.peacetalk.jmcp.core.model.Tool> toolList = new ArrayList<>();
 
-        // Aggregate tools from all registered providers
         for (McpProvider provider : toolProviders) {
             for (Tool tool : provider.getTools()) {
                 toolList.add(new org.peacetalk.jmcp.core.model.Tool(
@@ -95,7 +95,6 @@ public class ToolsHandler implements McpProtocolHandler {
 
     private JsonRpcResponse handleCallTool(JsonRpcRequest request) {
         try {
-            // Parse the call tool request
             CallToolRequest callRequest = MAPPER.convertValue(request.params(), CallToolRequest.class);
 
             String toolName = callRequest.name();
@@ -122,9 +121,7 @@ public class ToolsHandler implements McpProtocolHandler {
             return JsonRpcResponse.success(request.id(), result);
 
         } catch (Exception e) {
-            // Return error as MCP tool result
-            System.err.println("Tool execution failed: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Tool execution failed: {}", e.getMessage(), e);
             CallToolResult errorResult = CallToolResult.error("Tool execution failed: " + e.getMessage());
             return JsonRpcResponse.success(request.id(), errorResult);
         }

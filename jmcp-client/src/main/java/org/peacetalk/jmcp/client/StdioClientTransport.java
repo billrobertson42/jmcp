@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.client;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import tools.jackson.core.exc.StreamReadException;
@@ -15,6 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Launches the server process and communicates via stdin/stdout.
  */
 public class StdioClientTransport implements AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(StdioClientTransport.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final AtomicLong REQUEST_ID = new AtomicLong(1);
 
@@ -79,8 +82,7 @@ public class StdioClientTransport implements AutoCloseable {
             } catch (IOException e) {
                 // Server process ended or stream closed
                 if (serverProcess != null && serverProcess.isAlive()) {
-                    System.err.println("Error reading server stderr: " + e.getMessage());
-                    e.printStackTrace(System.err);
+                    LOG.error("Error reading server stderr: {}", e.getMessage(), e);
                 }
             }
         }, "stderr-reader");
@@ -92,9 +94,7 @@ public class StdioClientTransport implements AutoCloseable {
         try {
             listener.onServerStderr(line);
         } catch (Exception e) {
-            // Don't let listener exceptions break the stderr reading
-            System.err.println("Listener error on stderr: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Listener error on stderr: {}", e.getMessage(), e);
         }
     }
 
@@ -208,9 +208,7 @@ public class StdioClientTransport implements AutoCloseable {
         try {
             listener.onResponseReceived(response);
         } catch (Exception e) {
-            // Don't let listener exceptions break the response handling
-            System.err.println("Listener error on response received: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Listener error on response received: {}", e.getMessage(), e);
         }
     }
 
@@ -218,9 +216,7 @@ public class StdioClientTransport implements AutoCloseable {
         try {
             listener.onRequestSent(request);
         } catch (Exception e) {
-            // Don't let listener exceptions break the request
-            System.err.println("Listener error on request sent: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Listener error on request sent: {}", e.getMessage(), e);
         }
     }
 
@@ -232,9 +228,7 @@ public class StdioClientTransport implements AutoCloseable {
             try {
                 listener.onError(message, exception);
             } catch (Exception e) {
-                // Don't let listener exceptions cause more problems
-                System.err.println("Listener error on error notification: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Listener error on error notification: {}", e.getMessage(), e);
             }
         }
     }
@@ -256,7 +250,7 @@ public class StdioClientTransport implements AutoCloseable {
 
                 // First, destroy all descendant processes (children, grandchildren, etc.)
                 processHandle.descendants().forEach(descendant -> {
-                    System.err.println("Destroying descendant process: " + descendant.pid());
+                    LOG.debug("Destroying descendant process: {}", descendant.pid());
                     descendant.destroy();
                 });
 
@@ -267,7 +261,7 @@ public class StdioClientTransport implements AutoCloseable {
                 if (!serverProcess.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
                     // Force kill all descendants
                     processHandle.descendants().forEach(descendant -> {
-                        System.err.println("Force killing descendant process: " + descendant.pid());
+                        LOG.debug("Force killing descendant process: {}", descendant.pid());
                         descendant.destroyForcibly();
                     });
 
@@ -290,8 +284,7 @@ public class StdioClientTransport implements AutoCloseable {
                     serverProcess.destroyForcibly();
                 }
             } catch (Exception e) {
-                System.err.println("Error destroying process: " + e.getMessage());
-                e.printStackTrace(System.err);
+                LOG.error("Error destroying process: {}", e.getMessage(), e);
             }
         }
         serverProcess = null;
@@ -302,7 +295,7 @@ public class StdioClientTransport implements AutoCloseable {
             try {
                 stderrReaderThread.join(1000);
                 if (stderrReaderThread.isAlive()) {
-                    System.err.println("WARNING: stderr reader thread did not exit after 1 second");
+                    LOG.warn("stderr reader thread did not exit after 1 second");
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

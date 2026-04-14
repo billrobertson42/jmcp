@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Log4j2 configuration for jmcp-server.
+
+  IMPORTANT: This server communicates with MCP clients over stdout (stdio transport).
+  ALL log output MUST go to SYSTEM_ERR. Writing anything to stdout would corrupt the
+  MCP protocol stream.
+-->
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="Stderr" target="SYSTEM_ERR">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="org.peacetalk.jmcp.server.Main" level="info" additivity="false">
+            <AppenderRef ref="Stderr"/>
+        </Logger>
+        <Root level="warn">
+            <AppenderRef ref="Stderr"/>
+        </Root>
+    </Loggers>
+</Configuration>
+

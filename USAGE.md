@@ -10,48 +10,28 @@ mvn clean package
 
 ### 2. Configure Database Connections
 
-Create `~/.jmcp/config.json`. The top-level key is the JPMS module name of the
-provider that consumes the configuration:
+Create `~/.jmcp/config.json`:
 
 ```json
 {
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "mydb",
     "expose_urls": false,
-    "connections": [
-      {
-        "id": "mydb",
-        "databaseType": "postgresql",
-        "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
-        "username": "readonly_user",
-        "password": "secret"
-      }
-    ]
-  }
-}
-```
-
-### 3. Run the Server
-
-```bash
-./run.sh
-```
-
-Or with Maven:
-
-```bash
-mvn -q -pl jmcp-server exec:java
+  "connections": [
+    {
+      "id": "mydb",
+      "databaseType": "postgresql",
+      "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
+      "username": "readonly_user",
+      "password": "secret"
+    }
+  ]
 ```
 
 The server will:
 - Search for config: `-Djmcp.config` system property → `~/.jmcp/config.json` → `JMCP_CONFIG` env var
 - Pass each provider its config section keyed by JPMS module name
-- Crash with a full stack trace if any provider fails to initialize
-- Download required JDBC drivers from Maven Central on first use
-- Cache drivers in `~/.jmcp/drivers/`
-- Start listening on stdin for JSON-RPC requests
-
-## Configuration
+- Read configuration from `~/.jmcp/config.json` or `jmcp_CONFIG` environment variable
 
 ### Database Types
 
@@ -78,17 +58,13 @@ export JMCP_CONFIG='{"org.peacetalk.jmcp.jdbc":{"default_id":"test","expose_urls
 ./run.sh
 ```
 
-Or point to a specific file with a system property:
-
-```bash
-./run.sh -Djmcp.config=/path/to/my-config.json
-```
+Instead of a config file, you can use the `jmcp_CONFIG` environment variable:
 
 ## Available Tools
 
 ### 1. `query`
 
-Execute SELECT queries with optional parameters.
+export jmcp_CONFIG='{"connections":[{"id":"test","databaseType":"h2","jdbcUrl":"jdbc:h2:mem:test","username":"sa","password":""}]}'
 
 **Input:**
 ```json
@@ -99,10 +75,6 @@ Execute SELECT queries with optional parameters.
 }
 ```
 
-**Features:**
-- Only SELECT queries allowed (DML/DDL rejected)
-- Maximum 1000 rows returned
-- 30-second query timeout
 - Prepared statement support
 - Set `validate_only` to `true` to check syntax without executing
 
@@ -122,7 +94,7 @@ Get the execution plan for a SELECT query.
 
 Get the exact row count for a table.
 
-**Input:**
+- Only SELECT queries allowed
 ```json
 {
   "connectionId": "mydb",
@@ -133,30 +105,40 @@ Get the exact row count for a table.
 
 ### 4. `sample-data`
 
-Get sample rows from a table using a chosen strategy.
 
 **Input:**
 ```json
 {
   "connectionId": "mydb",
   "table": "users",
-  "schema": "public",
-  "strategy": "random",
+### 2. `list-tables`
+List all tables in the database or specific schema.
   "sample_size": 20
 }
 ```
 
-Strategies: `first` (default), `random`, `last`. Maximum 100 rows.
+  "schema": "public"
 
 ### 5. `analyze-column`
 
-Analyze a column's data distribution: distinct count, null count, min/max values,
-and top N most-frequent values with frequencies.
+### 3. `list-schemas`
+List all schemas/catalogs in the database.
 
 **Input:**
 ```json
 {
-  "connectionId": "mydb",
+  "connectionId": "mydb"
+}
+```
+
+### 4. `describe-table`
+
+### 5. `get-row-count`
+
+**Input:**
+```json
+{
+Get the total number of rows in a table.
   "table": "users",
   "column": "country",
   "schema": "public",
@@ -164,10 +146,8 @@ and top N most-frequent values with frequencies.
 }
 ```
 
-### 6. `resource-proxy`
-
-Workaround for MCP clients that don't implement the resources protocol (e.g., GitHub
-Copilot). Exposes database schema resources via the tools API.
+  "schema": "public"
+### 6. `preview-table`
 
 **Input:**
 ```json
@@ -176,9 +156,7 @@ Copilot). Exposes database schema resources via the tools API.
 ```json
 { "operation": "read", "uri": "db://context" }
 ```
-
-Use `uri='db://context'` for a complete schema overview. Ignore this tool if your
-client supports MCP resources natively.
+Get the first N rows from a table (default 10, max 100).
 
 ## MCP Protocol Examples
 
@@ -190,9 +168,7 @@ client supports MCP resources natively.
   "id": 1,
   "method": "initialize",
   "params": {
-    "protocolVersion": "2024-11-05",
-    "capabilities": {},
-    "clientInfo": {
+  "limit": 20
       "name": "test-client",
       "version": "1.0"
     }
@@ -200,37 +176,6 @@ client supports MCP resources natively.
 }
 ```
 
-### List Available Tools
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "method": "tools/list",
-  "params": {}
-}
-```
-
-### Execute a Tool
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 3,
-  "method": "tools/call",
-  "params": {
-    "name": "get-row-count",
-    "arguments": {
-      "connectionId": "mydb",
-      "table": "users"
-    }
-  }
-}
-```
-
-## Integration with Claude Desktop
-
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -277,11 +222,9 @@ Or specify the Java command directly:
 If a driver fails to download from Maven Central, check:
 - Internet connectivity
 - Maven Central availability
-- Driver coordinates are correct
+    "name": "list-tables",
 
-The server will log driver downloads to stderr.
-
-### Connection Issues
+      "connectionId": "mydb"
 
 Check:
 - JDBC URL format is correct
@@ -298,25 +241,26 @@ Each database connection uses an isolated classloader for its JDBC driver. This 
 ### Adding New Tools
 
 1. Create a class implementing `JdbcTool` in `jmcp-jdbc/src/main/java/org/peacetalk/jmcp/jdbc/tools/`
-2. Register the tool in `JdbcMcpProvider.initialize()` (add a `new JdbcToolAdapter(...)` line)
+2. Register the tool in `JdbcMcpProvider.configure()` (add a `new JdbcToolAdapter(...)` line)
 3. Rebuild: `mvn clean package`
 
+### Adding New Transport
 ### Adding New Transports
 
-1. Create a new module (e.g., `jmcp-transport-sse`)
-2. Implement `TransportProvider` from `jmcp-core`
-3. Declare the provider in the module's `module-info.java`:
-   ```java
-   provides org.peacetalk.jmcp.core.transport.TransportProvider
-       with com.example.SseTransportProvider;
-   ```
-4. Add the module as a `runtime` dependency of `jmcp-server`
+Before we do this, I think we need to address the single-threaded
+issue.
 
 The server discovers transports via `ServiceLoader` at startup and uses the one with
 the highest `priority()`. No changes to `Main.java` are required.
 
+stdio transport should be the highest priority as coming up in that
+mode for an inexperienced user is the safest thing to do.
+
 ### Adding New MCP Providers
 
+1. Create a module implementing `McpTransport`
+2. Register in `Main.java` as alternative to stdio
+3. Common transports: SSE (Server-Sent Events), WebSocket, HTTP
 1. Create a new module implementing `McpProvider` from `jmcp-core`
 2. Declare the provider in `module-info.java`:
    ```java
@@ -326,9 +270,9 @@ the highest `priority()`. No changes to `Main.java` are required.
 3. Add the module as a `runtime` dependency of `jmcp-server`
 4. Add a config section in `~/.jmcp/config.json` keyed by the module name
 
-The provider's `initialize(Map<String, Object> config)` receives its config section.
+The provider's `configure(Map<String, Object> config)` receives its config section.
 Throw `IllegalStateException` or `IOException` if the config is missing or invalid —
-the server will print the full stack trace and exit.
+2. Register the tool in `Main.java`
 
 ## Performance Considerations
 
@@ -337,11 +281,14 @@ the server will print the full stack trace and exit.
 - **Query Timeouts**: Prevent long-running queries from blocking
 - **Row Limits**: Prevent memory exhaustion from large result sets
 
-## Limitations
+## Features
 
-- Read-only operations only (no INSERT, UPDATE, DELETE, DDL)
-- Maximum 1000 rows per query result
 - 30-second query timeout
 - Requires Java 25+ (for modules)
+- SAFETY! Read-only operations only (no INSERT, UPDATE, DELETE, DDL)
+
+## Limitations
+
+- Maximum 1000 rows per query result
 - LIMIT syntax may vary by database (standardized in tools)
 

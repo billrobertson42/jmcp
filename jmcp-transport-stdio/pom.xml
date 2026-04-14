@@ -17,6 +17,10 @@
             <groupId>org.peacetalk</groupId>
             <artifactId>jmcp-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
 
         <!-- Test dependencies -->
         <dependency>

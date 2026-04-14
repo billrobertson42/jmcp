@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.Tool;
@@ -30,6 +32,7 @@ import java.util.Map;
  * a diagnostic message.
  */
 public class JdbcMcpProvider implements McpProvider {
+    private static final Logger LOG = LogManager.getLogger(JdbcMcpProvider.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private JdbcDriverManager driverManager;
@@ -42,7 +45,7 @@ public class JdbcMcpProvider implements McpProvider {
     }
 
     @Override
-    public void initialize(Map<String, Object> config) throws Exception {
+    public void configure(Map<String, Object> config) throws Exception {
         if (config == null) {
             throw new IllegalStateException(
                 "JDBC provider requires configuration. " +
@@ -72,7 +75,7 @@ public class JdbcMcpProvider implements McpProvider {
 
         // Register connections from config
         for (ConnectionConfig conn : jdbcConfig.connections()) {
-            System.err.println("Registering connection: " + conn.id());
+            LOG.info("Registering connection: {}", conn.id());
             connectionManager.registerConnection(
                 conn.id(),
                 conn.databaseType(),
@@ -82,8 +85,8 @@ public class JdbcMcpProvider implements McpProvider {
             );
         }
 
-        System.err.println("Driver cache: " + driverCacheDir);
-        System.err.println("Connections: " + jdbcConfig.connections().length);
+        LOG.info("Driver cache: {}", driverCacheDir);
+        LOG.info("Connections: {}", jdbcConfig.connections().length);
 
         // Initialize tools with adapters
         tools.clear();
@@ -120,7 +123,7 @@ public class JdbcMcpProvider implements McpProvider {
             resourceProvider.shutdown();
         }
         if (connectionManager != null) {
-            System.err.println("Closing all database connections...");
+            LOG.info("Closing all database connections...");
             connectionManager.closeAll();
         }
     }

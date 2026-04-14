@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.core.protocol;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.model.*;
@@ -18,6 +20,7 @@ import java.util.Set;
  * Uses the URI scheme to route requests to the appropriate provider.
  */
 public class ResourcesHandler implements McpProtocolHandler {
+    private static final Logger LOG = LogManager.getLogger(ResourcesHandler.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final List<ResourceProvider> resourceProviders;
@@ -50,8 +53,7 @@ public class ResourcesHandler implements McpProtocolHandler {
                 default -> JsonRpcResponse.error(request.id(), JsonRpcError.methodNotFound(request.method()));
             };
         } catch (Exception e) {
-            System.err.println("Error handling request: " + request.method());
-            e.printStackTrace(System.err);
+            LOG.error("Error handling request: {}", request.method(), e);
             return JsonRpcResponse.error(request.id(), JsonRpcError.internalError(e.getMessage()));
         }
     }
@@ -134,8 +136,7 @@ public class ResourcesHandler implements McpProtocolHandler {
             return JsonRpcResponse.error(request.id(),
                 JsonRpcError.invalidParams(e.getMessage()));
         } catch (Exception e) {
-            System.err.println("Resource read failed: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.error("Resource read failed: " + e.getMessage(), e);
             return JsonRpcResponse.error(request.id(),
                 JsonRpcError.internalError("Resource read failed: " + e.getMessage()));
         }

@@ -1,5 +1,7 @@
 package org.peacetalk.jmcp.server;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.core.McpProvider;
 import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.protocol.InitializationHandler;
@@ -27,6 +29,7 @@ import java.util.ServiceLoader;
  * assembles the server, and starts the transport.
  */
 public class Main {
+    private static final Logger LOG = LogManager.getLogger(Main.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static void main(String[] args) {
@@ -47,7 +50,7 @@ public class Main {
                     "Ensure a transport module (e.g., jmcp-transport-stdio) " +
                     "is on the module path and resolved via --add-modules."));
 
-            System.err.println("Using transport: " + transportProvider.getName());
+            LOG.info("Using transport: {}", transportProvider.getName());
 
             // 3. Discover MCP providers
             ServiceLoader.load(McpProvider.class).forEach(providers::add);
@@ -59,7 +62,7 @@ public class Main {
                     "is on the module path and resolved via --add-modules.");
             }
 
-            // 4. Initialize all providers — fail fast on any error
+            // 4. Configure all providers — fail fast on any error
             for (McpProvider provider : providers) {
                 // Verify provider is in a named JPMS module
                 Module module = provider.getClass().getModule();
@@ -77,10 +80,9 @@ public class Main {
                     ? (Map<String, Object>) configMap.get(moduleName)
                     : null;
 
-                System.err.println("Initializing provider: " + provider.getName() +
-                    " (module: " + moduleName + ")...");
-                provider.initialize(providerConfig);
-                System.err.println("Initialized provider: " + provider.getName());
+                LOG.info("Configuring provider: {} (module: {})...", provider.getName(), moduleName);
+                provider.configure(providerConfig);
+                LOG.info("Configured provider: {}", provider.getName());
             }
 
             // 5. Assemble server
@@ -92,48 +94,41 @@ public class Main {
             final McpTransport finalTransport = transport;
             final List<McpProvider> finalProviders = List.copyOf(providers);
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                System.err.println("Shutting down...");
+                LOG.info("Shutting down...");
                 try {
                     finalTransport.stop();
                 } catch (Exception e) {
-                    System.err.println("Error stopping transport: " + e.getMessage());
-                    e.printStackTrace(System.err);
+                    LOG.error("Error stopping transport: {}", e.getMessage(), e);
                 }
                 for (McpProvider p : finalProviders) {
                     try {
                         p.shutdown();
                     } catch (Exception e) {
-                        System.err.println("Error shutting down provider " +
-                            p.getName() + ": " + e.getMessage());
-                        e.printStackTrace(System.err);
+                        LOG.error("Error shutting down provider {}: {}", p.getName(), e.getMessage(), e);
                     }
                 }
             }));
 
-            System.err.println("MCP Server starting...");
+            LOG.info("MCP Server starting...");
             transport.start(mcpServer);
             Thread.currentThread().join();
 
         } catch (Exception e) {
-            System.err.println("Fatal error: " + e.getMessage());
-            e.printStackTrace(System.err);
+            LOG.fatal("Fatal error: {}", e.getMessage(), e);
 
-            // Clean up any providers that were successfully initialized
+            // Clean up any providers that were successfully configured
             for (McpProvider p : providers) {
                 try {
                     p.shutdown();
                 } catch (Exception ex) {
-                    System.err.println("Error during cleanup of " +
-                        p.getName() + ": " + ex.getMessage());
-                    ex.printStackTrace(System.err);
+                    LOG.error("Error during cleanup of {}: {}", p.getName(), ex.getMessage(), ex);
                 }
             }
             if (transport != null) {
                 try {
                     transport.stop();
                 } catch (Exception ex) {
-                    System.err.println("Error stopping transport: " + ex.getMessage());
-                    ex.printStackTrace(System.err);
+                    LOG.error("Error stopping transport: {}", ex.getMessage(), ex);
                 }
             }
 
@@ -166,35 +161,35 @@ public class Main {
                     "Configuration file specified by system property 'jmcp.config' " +
                     "does not exist: " + configPath);
             }
-            System.err.println("Loading configuration from system property: " + configPath);
+            LOG.info("Loading configuration from system property: {}", configPath);
             return MAPPER.readValue(configPath.toFile(), Map.class);
         }
 
         // Try default config file
         Path configPath = Paths.get(System.getProperty("user.home"), ".jmcp", "config.json");
         if (Files.exists(configPath)) {
-            System.err.println("Loading configuration from: " + configPath);
+            LOG.info("Loading configuration from: {}", configPath);
             return MAPPER.readValue(configPath.toFile(), Map.class);
         }
 
         // Try environment variable
         String configEnv = System.getenv("JMCP_CONFIG");
         if (configEnv != null) {
-            System.err.println("Loading configuration from JMCP_CONFIG environment variable");
+            LOG.info("Loading configuration from JMCP_CONFIG environment variable");
             return MAPPER.readValue(configEnv, Map.class);
         }
 
         // No configuration found — not necessarily an error
-        System.err.println("No configuration file found. " +
+        LOG.warn("No configuration file found. " +
             "Providers that require configuration will fail during initialization.");
         return null;
     }
 
     /**
-     * Assemble an McpServer from discovered and initialized providers.
+     * Assemble an McpServer from discovered and configured providers.
      * Public for testability (accessible via qualified export to test module).
      *
-     * @param providers initialized McpProvider instances
+     * @param providers configured McpProvider instances
      * @return a fully assembled McpServer ready for transport.start()
      */
     public static McpServer assembleServer(List<McpProvider> providers) {
@@ -224,7 +219,7 @@ public class Main {
             ServerToolProvider proxyProvider = new ServerToolProvider(resourcesHandler);
             toolsHandler.registerProvider(proxyProvider);
             hasTools = true;
-            System.err.println("Registered resource proxy tool for resource-unaware clients");
+            LOG.info("Registered resource proxy tool for resource-unaware clients");
         }
 
         server.registerHandler(new InitializationHandler(hasTools, hasResources));
