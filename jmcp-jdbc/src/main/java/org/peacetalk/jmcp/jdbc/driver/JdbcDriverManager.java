@@ -18,17 +18,20 @@ package org.peacetalk.jmcp.jdbc.driver;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.peacetalk.jmcp.jdbc.ProxyConfig;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
-import java.net.URLClassLoader;
+import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Driver;
+import java.sql.DriverManager;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Manages dynamic loading of JDBC drivers from Maven Central
@@ -52,10 +55,12 @@ public class JdbcDriverManager {
 
     private final Path driverCacheDir;
     private final Map<String, DriverClassLoader> loadedDrivers;
+    private final ProxyConfig proxyConfig;
 
     public JdbcDriverManager(Path driverCacheDir) throws IOException {
         this.driverCacheDir = driverCacheDir;
         this.loadedDrivers = new ConcurrentHashMap<>();
+        this.proxyConfig = new ProxyConfig();
         Files.createDirectories(driverCacheDir);
     }
 
@@ -109,13 +114,28 @@ public class JdbcDriverManager {
         String url = coordinates.getMavenCentralUrl();
         LOG.info("Downloading driver from: {}", url);
 
-        try (InputStream in = new URL(url).openStream()) {
+        URLConnection conn = null;
+
+        String proxyHost = proxyConfig.getProxyHost();
+        if(proxyHost != null ) {
+            String proxyPortStr = proxyConfig.getProxyPort();
+            int proxyPort = proxyPortStr != null ? Integer.parseInt(proxyPortStr) : 80;
+            InetSocketAddress proxyAddress = new InetSocketAddress(proxyHost, proxyPort);
+            Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
+            conn = new URL(url).openConnection(proxy);
+        }
+        else {
+            conn = new URL(url).openConnection();
+        }
+
+        try (InputStream in = conn.getInputStream()) {
             Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
         }
 
         LOG.info("Driver downloaded to: {}", targetPath);
         return targetPath;
     }
+
 
     /**
      * Unload a driver and close its classloader
