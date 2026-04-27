@@ -1,6 +1,6 @@
 # `various_fixes` Branch Summary
 
-Five commits on top of the `d895f79` merge point.
+Six commits on top of the `d895f79` merge point.
 
 ---
 
@@ -21,10 +21,9 @@ Five commits on top of the `d895f79` merge point.
   (`getConnectionId`, `getJdbcUrl`, `getUsername`, `getDatabaseType`,
   `getSchemaFilter`).
 
-### `ConnectionContext` (heavily revised)
+### `ConnectionContext` was `ConnectionPool` (heavily revised)
 - Now implements `ConnectionSupplier`.
 - Constructed from a `ConnectionConfig` instead of individual strings.
-- Manages the HikariCP `DataSource` directly (previously in `ConnectionPool`).
 - Exposes `getSchemaFilter()` returning `Set<String>` for O(1) look-ups.
 
 ### `ConnectionManager` (simplified)
@@ -92,6 +91,21 @@ Five commits on top of the `d895f79` merge point.
 
 ---
 
+## 6. Document proxy configuration (`440a7cb`)
+
+- Added **"HTTP Proxy for Driver Downloads"** section to `README.md` (under
+  Configuration) and expanded the **"Driver Download Issues"** troubleshooting
+  section in `USAGE.md`.
+- Both sections cover:
+  - Java system properties (`-Dhttp.proxyHost` / `-Dhttp.proxyPort`)
+  - Environment variables (`HTTP_PROXY` / `http_proxy`, upper- and lower-case)
+  - Resolution order: system properties beat env vars; `HTTP_PROXY` checked before
+    `HTTPS_PROXY`
+- Also created `claude/VARIOUS_FIXES_BRANCH_SUMMARY.md` (this file) as part of the
+  same commit.
+
+---
+
 ## Test changes
 
 | File | Change |
@@ -102,4 +116,3 @@ Five commits on top of the `d895f79` merge point.
 | `ContextResourceTest` | Updated to use `ConnectionConfig.basic(…)` |
 | `JdbcDriverClassManagerTest` | Renamed from `JdbcDriverManagerTest` |
 | `module-info.java` (test) | Added `requires org.junit.jupiter.params` for parameterised tests |
-
