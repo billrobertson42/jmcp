@@ -155,6 +155,28 @@ corresponding provider by JPMS module name. Create file at its default location 
 1. System property: `-Djmcp.config=/path/to/config.json`
 2. Default location: `~/.jmcp/config.json`
 
+### HTTP Proxy for Driver Downloads
+
+JDBC drivers are downloaded from Maven Central on first use. If your environment
+requires an HTTP proxy, configure it using standard Java system properties or
+environment variables — no changes to the config file are needed.
+
+**Java system properties** (pass on the command line or in `run.sh`):
+```
+-Dhttp.proxyHost=proxy.example.com
+-Dhttp.proxyPort=8080
+```
+
+**Environment variables** (upper- or lower-case are both accepted):
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+# or
+export http_proxy=http://proxy.example.com:8080
+```
+
+Resolution order: system properties take precedence over environment variables.
+`HTTP_PROXY` is checked before `HTTPS_PROXY`.
+
 ### Fail-fast initialization
 
 If a provider's `configure()` throws — missing config, bad credentials, unreachable

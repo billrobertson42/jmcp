@@ -236,9 +236,26 @@ Or specify the Java command directly:
 If a driver fails to download from Maven Central, check:
 - Internet connectivity
 - Maven Central availability
-    "name": "list-tables",
 
-      "connectionId": "mydb"
+If your environment requires an HTTP proxy, configure it via system properties or
+environment variables — no changes to `config.json` are needed.
+
+**Java system properties** (add to the `java` command in `run.sh`):
+```
+-Dhttp.proxyHost=proxy.example.com
+-Dhttp.proxyPort=8080
+```
+
+**Environment variables** (upper- or lower-case are both accepted):
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+# or
+export http_proxy=http://proxy.example.com:8080
+```
+
+Resolution order: system properties take precedence over environment variables.
+`HTTP_PROXY` is checked before `HTTPS_PROXY`.
+
 
 Check:
 - JDBC URL format is correct
