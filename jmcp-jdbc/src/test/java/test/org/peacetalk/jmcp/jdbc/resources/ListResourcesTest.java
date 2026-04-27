@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
+import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
 import org.peacetalk.jmcp.jdbc.resources.TablesListResource;
 import org.peacetalk.jmcp.jdbc.resources.ViewsListResource;
@@ -53,8 +54,8 @@ class TablesListResourceTest {
 
         JdbcDriverManager driverManager = new JdbcDriverManager(Path.of("/tmp"));
         connectionManager = new ConnectionManager(driverManager);
-        connectionManager.registerConnection("test", "h2",
-                "jdbc:h2:mem:test", "sa", "");
+        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2",
+                "jdbc:h2:mem:test", "sa", ""));
 
         tablesListResource = new TablesListResource("test", "TEST_SCHEMA", connectionManager);
         mapper = new ObjectMapper();
@@ -162,8 +163,8 @@ class ViewsListResourceTest {
 
         JdbcDriverManager driverManager = new JdbcDriverManager(Path.of("/tmp"));
         connectionManager = new ConnectionManager(driverManager);
-        connectionManager.registerConnection("test", "h2",
-                "jdbc:h2:mem:test", "sa", "");
+        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2",
+                "jdbc:h2:mem:test", "sa", ""));
 
         viewsListResource = new ViewsListResource("test", "TEST_SCHEMA", connectionManager);
         mapper = new ObjectMapper();

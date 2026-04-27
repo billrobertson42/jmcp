@@ -16,12 +16,19 @@
 
 package org.peacetalk.jmcp.jdbc.config;
 
+import java.util.Collections;
+import java.util.List;
+
 public record ConnectionConfig(
     String id,
     String databaseType,
     String jdbcUrl,
     String username,
-    String password
+    String password,
+    List<String> schemaFilter
 ) {
+    public static ConnectionConfig basic(String id, String databaseType,
+                                         String jdbcUrl, String username, String password) {
+        return new ConnectionConfig(id, databaseType, jdbcUrl, username, password, Collections.EMPTY_LIST);
+    }
 }
-

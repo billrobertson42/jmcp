@@ -20,6 +20,7 @@ open module org.peacetalk.jmcp.jdbc.test {
     requires java.sql;
     requires tools.jackson.databind;
     requires org.junit.jupiter.api;
+    requires org.junit.jupiter.params;
     requires org.mockito;
     requires org.mockito.junit.jupiter;
     requires com.h2database;

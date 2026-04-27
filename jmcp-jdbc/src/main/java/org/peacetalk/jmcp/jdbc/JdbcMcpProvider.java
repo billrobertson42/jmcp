@@ -90,15 +90,9 @@ public class JdbcMcpProvider implements McpProvider {
         connectionManager.setExposeUrls(jdbcConfig.expose_urls());
 
         // Register connections from config
-        for (ConnectionConfig conn : jdbcConfig.connections()) {
-            LOG.info("Registering connection: {}", conn.id());
-            connectionManager.registerConnection(
-                conn.id(),
-                conn.databaseType(),
-                conn.jdbcUrl(),
-                conn.username(),
-                conn.password()
-            );
+        for (ConnectionConfig connCfg : jdbcConfig.connections()) {
+            LOG.info("Registering connection: {}", connCfg.id());
+            connectionManager.registerConnection(connCfg);
         }
 
         LOG.info("Driver cache: {}", driverCacheDir);

@@ -16,19 +16,17 @@
 
 package org.peacetalk.jmcp.jdbc;
 
-/**
- * Interface for resolving connection contexts.
- * This allows JdbcToolAdapter to get connections without tight coupling to ConnectionManager.
- */
-public interface ConnectionContextResolver {
-    /**
-     * Get the default connection ID
-     */
-    String getDefaultConnectionId();
+import java.sql.Connection;
 
+/**
+ * Context for executing JDBC operations
+ */
+@FunctionalInterface
+public interface ConnectionSupplier {
     /**
-     * Get a connection context by ID
+     * Get a connection from the pool
      */
-    ConnectionSupplier getContext(String connectionId);
+    Connection getConnection() throws Exception;
+
 }
 

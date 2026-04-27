@@ -17,7 +17,7 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
@@ -73,7 +73,7 @@ public class ConnectionResource implements Resource {
             .findFirst()
             .orElseThrow(() -> new IllegalArgumentException("Connection not found: " + connectionId));
 
-        ConnectionContext context = connectionManager.getContext(connectionId);
+        ConnectionSupplier context = connectionManager.getContext(connectionId);
         DatabaseInfo dbInfo;
 
         try (Connection conn = context.getConnection()) {

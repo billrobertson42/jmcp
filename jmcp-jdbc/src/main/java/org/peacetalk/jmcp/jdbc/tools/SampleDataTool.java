@@ -19,7 +19,7 @@ package org.peacetalk.jmcp.jdbc.tools;
 import org.peacetalk.jmcp.core.schema.IntegerProperty;
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
 import org.peacetalk.jmcp.core.schema.StringProperty;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.JdbcTool;
 import org.peacetalk.jmcp.jdbc.tools.results.CompactQueryResult;
 import tools.jackson.databind.JsonNode;
@@ -72,7 +72,7 @@ public class SampleDataTool implements JdbcTool {
     }
 
     @Override
-    public Object execute(JsonNode params, ConnectionContext context) throws Exception {
+    public Object execute(JsonNode params, ConnectionSupplier context) throws Exception {
         String tableName = params.get("table").asString();
         String schemaName = params.has("schema") ? params.get("schema").asString() : null;
         int sampleSize = params.has("sample_size") ? params.get("sample_size").asInt() : DEFAULT_SAMPLE_SIZE;
