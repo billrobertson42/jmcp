@@ -170,6 +170,8 @@ public class JdbcResourceProvider implements ResourceProvider {
 
         if ("relationships".equals(objectTypeOrCollection)) {
             return new SchemaRelationshipsResource(connectionId, schemaName, connectionManager);
+        } else if ("tables".equals(objectTypeOrCollection)) {
+            return new TablesListResource(connectionId, schemaName, connectionManager);
         }
         return null;
     }
