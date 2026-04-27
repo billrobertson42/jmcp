@@ -130,12 +130,25 @@ corresponding provider by JPMS module name. Create file at its default location 
         "databaseType": "postgresql",
         "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
         "username": "user",
-        "password": "pass"
+        "password": "pass",
+        "schemaFilter": ["public", "reporting"]
       }
     ]
   }
 }
 ```
+
+### Connection fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes      | Unique identifier for this connection |
+| `databaseType` | yes      | Database type — see supported types below |
+| `jdbcUrl` | yes      | JDBC connection URL |
+| `username` | yes      | Database username |
+| `password` | yes      | Database password |
+| `schemaFilter` | no       | JSON array of schema names to expose. When omitted, all schemas are visible. Recommended for large databases with many schemas. |
+
 
 ### Config file search order
 
@@ -177,4 +190,3 @@ Additionally, database users should have SELECT-only privileges.
 ## License
 
 This project is licensed under the [Apache License, Version 2.0](LICENSE).
-

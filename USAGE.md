@@ -17,16 +17,31 @@ Create `~/.jmcp/config.json`:
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "mydb",
     "expose_urls": false,
-  "connections": [
-    {
-      "id": "mydb",
-      "databaseType": "postgresql",
-      "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
-      "username": "readonly_user",
-      "password": "secret"
-    }
-  ]
+    "connections": [
+      {
+        "id": "mydb",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
+        "username": "readonly_user",
+        "password": "secret",
+        "schemaFilter": ["public", "reporting"]
+      }
+    ]
+  }
+}
 ```
+
+### Connection fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes      | Unique identifier for this connection |
+| `databaseType` | yes      | Database type — see supported types below |
+| `jdbcUrl` | yes      | JDBC connection URL |
+| `username` | yes      | Database username |
+| `password` | yes      | Database password |
+| `schemaFilter` | no       | JSON array of schema names to expose. When omitted, all schemas are visible. Recommended for large databases with many schemas. |
+
 
 The server will:
 - Search for config: `-Djmcp.config` system property → `~/.jmcp/config.json` → `JMCP_CONFIG` env var
@@ -138,7 +153,6 @@ List all schemas/catalogs in the database.
 **Input:**
 ```json
 {
-Get the total number of rows in a table.
   "table": "users",
   "column": "country",
   "schema": "public",
@@ -291,4 +305,3 @@ Throw `IllegalStateException` or `IOException` if the config is missing or inval
 
 - Maximum 1000 rows per query result
 - LIMIT syntax may vary by database (standardized in tools)
-

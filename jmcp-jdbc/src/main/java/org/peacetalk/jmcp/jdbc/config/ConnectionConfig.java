@@ -27,8 +27,12 @@ public record ConnectionConfig(
     String password,
     List<String> schemaFilter
 ) {
+    public ConnectionConfig {
+        schemaFilter = (schemaFilter == null) ? Collections.emptyList() : Collections.unmodifiableList(schemaFilter);
+    }
+
     public static ConnectionConfig basic(String id, String databaseType,
                                          String jdbcUrl, String username, String password) {
-        return new ConnectionConfig(id, databaseType, jdbcUrl, username, password, Collections.EMPTY_LIST);
+        return new ConnectionConfig(id, databaseType, jdbcUrl, username, password, Collections.emptyList());
     }
 }

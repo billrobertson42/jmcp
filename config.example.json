@@ -8,7 +8,8 @@
         "databaseType": "postgresql",
         "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
         "username": "readonly_user",
-        "password": "secret"
+        "password": "secret",
+        "schemaFilter": ["public", "reporting"]
       },
       {
         "id": "analytics",
