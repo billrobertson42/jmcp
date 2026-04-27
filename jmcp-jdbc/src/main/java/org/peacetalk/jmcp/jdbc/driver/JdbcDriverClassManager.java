@@ -27,17 +27,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Driver;
-import java.sql.DriverManager;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Manages dynamic loading of JDBC drivers from Maven Central
  */
-public class JdbcDriverManager {
-    private static final Logger LOG = LogManager.getLogger(JdbcDriverManager.class);
+public class JdbcDriverClassManager {
+    private static final Logger LOG = LogManager.getLogger(JdbcDriverClassManager.class);
 
     // HikariCP version to use with all drivers (6.x for Java 11+, 7.x requires Java 21+)
     private static final MavenCoordinates HIKARI_CP =
@@ -57,7 +54,7 @@ public class JdbcDriverManager {
     private final Map<String, DriverClassLoader> loadedDrivers;
     private final ProxyConfig proxyConfig;
 
-    public JdbcDriverManager(Path driverCacheDir) throws IOException {
+    public JdbcDriverClassManager(Path driverCacheDir) throws IOException {
         this.driverCacheDir = driverCacheDir;
         this.loadedDrivers = new ConcurrentHashMap<>();
         this.proxyConfig = new ProxyConfig();

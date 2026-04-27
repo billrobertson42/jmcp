@@ -3,7 +3,7 @@ package org.peacetalk.jmcp.jdbc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -21,9 +21,9 @@ public class ConnectionContext implements ConnectionSupplier {
 
     private final ConnectionConfig config;
     private final DataSource dataSource;
-    private final JdbcDriverManager.DriverClassLoader classLoader;
+    private final JdbcDriverClassManager.DriverClassLoader classLoader;
 
-    public ConnectionContext(ConnectionConfig config, Driver driver, JdbcDriverManager.DriverClassLoader classLoader) {
+    public ConnectionContext(ConnectionConfig config, Driver driver, JdbcDriverClassManager.DriverClassLoader classLoader) {
         this.config = config;
         this.classLoader = classLoader;
 

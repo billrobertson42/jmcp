@@ -23,7 +23,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.nio.file.Path;
@@ -38,12 +38,12 @@ class ConnectionManagerTest {
     @TempDir
     Path tempDir;
 
-    private JdbcDriverManager driverManager;
+    private JdbcDriverClassManager driverManager;
     private ConnectionManager connectionManager;
 
     @BeforeEach
     void setUp() throws Exception {
-        JdbcDriverManager driverManager = new JdbcDriverManager(tempDir);
+        JdbcDriverClassManager driverManager = new JdbcDriverClassManager(tempDir);
         connectionManager = new ConnectionManager(driverManager);
     }
 

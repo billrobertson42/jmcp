@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.resources.ContextResource;
 import tools.jackson.databind.ObjectMapper;
 
@@ -49,7 +49,7 @@ class ContextResourceTest {
             stmt.execute("INSERT INTO test_table VALUES (1, 'Test')");
         }
 
-        JdbcDriverManager driverManager = new JdbcDriverManager(Path.of("/tmp"));
+        JdbcDriverClassManager driverManager = new JdbcDriverClassManager(Path.of("/tmp"));
         connectionManager = new ConnectionManager(driverManager);
         connectionManager.registerConnection(ConnectionConfig.basic("test", "h2",
                 "jdbc:h2:mem:test", "sa", ""));

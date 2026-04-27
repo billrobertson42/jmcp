@@ -21,7 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.resources.TablesListResource;
 import org.peacetalk.jmcp.jdbc.resources.ViewsListResource;
 import tools.jackson.databind.ObjectMapper;
@@ -52,7 +52,7 @@ class TablesListResourceTest {
             stmt.execute("CREATE TABLE TEST_SCHEMA.TABLE2 (id INT, \"VALUE\" INT)");
         }
 
-        JdbcDriverManager driverManager = new JdbcDriverManager(Path.of("/tmp"));
+        JdbcDriverClassManager driverManager = new JdbcDriverClassManager(Path.of("/tmp"));
         connectionManager = new ConnectionManager(driverManager);
         connectionManager.registerConnection(ConnectionConfig.basic("test", "h2",
                 "jdbc:h2:mem:test", "sa", ""));
@@ -161,7 +161,7 @@ class ViewsListResourceTest {
             stmt.execute("CREATE VIEW TEST_SCHEMA.VIEW2 AS SELECT name FROM TEST_SCHEMA.BASE_TABLE");
         }
 
-        JdbcDriverManager driverManager = new JdbcDriverManager(Path.of("/tmp"));
+        JdbcDriverClassManager driverManager = new JdbcDriverClassManager(Path.of("/tmp"));
         connectionManager = new ConnectionManager(driverManager);
         connectionManager.registerConnection(ConnectionConfig.basic("test", "h2",
                 "jdbc:h2:mem:test", "sa", ""));

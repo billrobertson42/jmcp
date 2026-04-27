@@ -19,7 +19,7 @@ package org.peacetalk.jmcp.jdbc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.sql.Driver;
@@ -34,12 +34,12 @@ public class ConnectionManager implements ConnectionContextResolver {
 
     private static final Logger LOG = LogManager.getLogger(ConnectionManager.class);
 
-    private final JdbcDriverManager driverManager;
+    private final JdbcDriverClassManager driverManager;
     private final Map<String, ConnectionContext> pools;
     private String defaultConnectionId;
     private boolean exposeUrls;
 
-    public ConnectionManager(JdbcDriverManager driverManager) {
+    public ConnectionManager(JdbcDriverClassManager driverManager) {
         this.driverManager = driverManager;
         this.pools = new ConcurrentHashMap<>();
         this.defaultConnectionId = "default";
@@ -84,7 +84,7 @@ public class ConnectionManager implements ConnectionContextResolver {
         }
 
         // Load the driver in isolated classloader
-        JdbcDriverManager.DriverClassLoader classLoader = driverManager.loadDriver(config.databaseType());
+        JdbcDriverClassManager.DriverClassLoader classLoader = driverManager.loadDriver(config.databaseType());
 
         // Determine driver class name
         String driverClassName = getDriverClassName(config.databaseType());
