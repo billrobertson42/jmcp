@@ -18,11 +18,10 @@ package org.peacetalk.jmcp.jdbc;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
-import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.Driver;
 import java.util.List;
 import java.util.Map;
@@ -35,12 +34,12 @@ public class ConnectionManager implements ConnectionContextResolver {
 
     private static final Logger LOG = LogManager.getLogger(ConnectionManager.class);
 
-    private final JdbcDriverManager driverManager;
-    private final Map<String, ConnectionPool> pools;
+    private final JdbcDriverClassManager driverManager;
+    private final Map<String, ConnectionContext> pools;
     private String defaultConnectionId;
     private boolean exposeUrls;
 
-    public ConnectionManager(JdbcDriverManager driverManager) {
+    public ConnectionManager(JdbcDriverClassManager driverManager) {
         this.driverManager = driverManager;
         this.pools = new ConcurrentHashMap<>();
         this.defaultConnectionId = "default";
@@ -78,38 +77,31 @@ public class ConnectionManager implements ConnectionContextResolver {
     /**
      * Register a new connection
      */
-    public void registerConnection(String connectionId, String databaseType,
-                                   String jdbcUrl, String username, String password) throws Exception {
-        if (pools.containsKey(connectionId)) {
-            throw new IllegalArgumentException("Connection already exists: " + connectionId);
+
+     public void registerConnection(ConnectionConfig config) throws Exception {
+        if (pools.containsKey(config.id())) {
+            throw new IllegalArgumentException("Connection already exists: " + config.id());
         }
 
         // Load the driver in isolated classloader
-        JdbcDriverManager.DriverClassLoader classLoader = driverManager.loadDriver(databaseType);
+        JdbcDriverClassManager.DriverClassLoader classLoader = driverManager.loadDriver(config.databaseType());
 
         // Determine driver class name
-        String driverClassName = getDriverClassName(databaseType);
+        String driverClassName = getDriverClassName(config.databaseType());
         Driver driver = classLoader.loadDriverClass(driverClassName);
 
         // Create connection pool
-        ConnectionPool pool = new ConnectionPool(connectionId, databaseType, jdbcUrl, username, password, driver, classLoader);
-        pools.put(connectionId, pool);
+        ConnectionContext pool = new ConnectionContext(config, driver, classLoader);
+        pools.put(config.id(), pool);
     }
 
-    /**
-     * Get connection context for a connection ID
-     */
+    @Override
     public ConnectionContext getContext(String connectionId) {
-        ConnectionPool pool = pools.get(connectionId);
+        ConnectionContext pool = pools.get(connectionId);
         if (pool == null) {
             throw new IllegalArgumentException("Connection not found: " + connectionId);
         }
         return pool;
-    }
-
-    @Override
-    public ConnectionContext getConnectionContext(String connectionId) {
-        return getContext(connectionId);
     }
 
     /**
@@ -130,7 +122,7 @@ public class ConnectionManager implements ConnectionContextResolver {
      * Close a connection and release resources
      */
     public void closeConnection(String connectionId) {
-        ConnectionPool pool = pools.remove(connectionId);
+        ConnectionContext pool = pools.remove(connectionId);
         if (pool != null) {
             pool.close();
         }
@@ -140,7 +132,7 @@ public class ConnectionManager implements ConnectionContextResolver {
      * Close all connections
      */
     public void closeAll() {
-        pools.values().forEach(ConnectionPool::close);
+        pools.values().forEach(ConnectionContext::close);
         pools.clear();
     }
 
@@ -157,121 +149,5 @@ public class ConnectionManager implements ConnectionContextResolver {
         };
     }
 
-    /**
-     * Connection pool with isolated classloader for driver and HikariCP
-     */
-    private static class ConnectionPool implements ConnectionContext {
-        private final String connectionId;
-        private final String databaseType;
-        private final String jdbcUrl;
-        private final String username;
-        private final DataSource dataSource;
-        private final JdbcDriverManager.DriverClassLoader classLoader;
-
-        public ConnectionPool(String connectionId, String databaseType, String jdbcUrl, String username,
-                            String password, Driver driver, JdbcDriverManager.DriverClassLoader classLoader) {
-            this.connectionId = connectionId;
-            this.databaseType = databaseType;
-            this.jdbcUrl = jdbcUrl;
-            this.username = username;
-            this.classLoader = classLoader;
-
-            try {
-                // Load HikariCP classes through the driver classloader
-                Class<?> hikariConfigClass = classLoader.loadClass("com.zaxxer.hikari.HikariConfig");
-                Class<?> hikariDataSourceClass = classLoader.loadClass("com.zaxxer.hikari.HikariDataSource");
-
-                // Create HikariConfig instance
-                Object config = hikariConfigClass.getDeclaredConstructor().newInstance();
-
-                // Set properties using reflection
-                hikariConfigClass.getMethod("setJdbcUrl", String.class).invoke(config, jdbcUrl);
-                hikariConfigClass.getMethod("setUsername", String.class).invoke(config, username);
-                hikariConfigClass.getMethod("setPassword", String.class).invoke(config, password);
-                hikariConfigClass.getMethod("setMaximumPoolSize", int.class).invoke(config, 5);
-                hikariConfigClass.getMethod("setMinimumIdle", int.class).invoke(config, 0);
-                hikariConfigClass.getMethod("setReadOnly", boolean.class).invoke(config, true);
-                hikariConfigClass.getMethod("setDriverClassName", String.class).invoke(config, driver.getClass().getName());
-
-//                // For PostgreSQL, add connection properties to help with authentication
-//                if ("postgresql".equalsIgnoreCase(databaseType)) {
-//                    hikariConfigClass.getMethod("addDataSourceProperty", String.class, Object.class)
-//                        .invoke(config, "ApplicationName", "jmcp-server");
-//                    // Disable SSL by default for local connections (can be overridden in JDBC URL)
-//                    if (!jdbcUrl.contains("ssl")) {
-//                        hikariConfigClass.getMethod("addDataSourceProperty", String.class, Object.class)
-//                            .invoke(config, "ssl", "false");
-//                    }
-//                }
-
-                // Create HikariDataSource with the config
-                this.dataSource = (DataSource) hikariDataSourceClass
-                    .getDeclaredConstructor(hikariConfigClass)
-                    .newInstance(config);
-
-            } catch (Exception e) {
-                LOG.error("=== Failed to create connection pool ===");
-                LOG.error("Connection ID: {}", connectionId);
-                LOG.error("Database Type: {}", databaseType);
-                LOG.error("JDBC URL: {}", jdbcUrl);
-                LOG.error("Username: {}", username);
-                LOG.error("Password: {}", (password != null ? "****" : "null"));
-                LOG.error("Driver Class: {}", driver.getClass().getName());
-                LOG.error("ClassLoader: {}", classLoader.getClass().getName());
-                LOG.error("Max Pool Size: 5, Min Idle: 0, Read Only: true");
-
-                // Add specific guidance for Postgres.app trust authentication errors
-                if ("postgresql".equalsIgnoreCase(databaseType) &&
-                    e.getMessage() != null &&
-                    e.getMessage().contains("trust authentication")) {
-                    LOG.error("*** POSTGRES.APP TRUST AUTHENTICATION ERROR ***");
-                    LOG.error("Postgres.app is blocking trust authentication.");
-                    LOG.error("Possible solutions:");
-                    LOG.error("1. Add credentials to JDBC URL: jdbc:postgresql://localhost/dot?user={}&password=YOUR_PASSWORD", username);
-                    LOG.error("2. Configure Postgres.app to allow this app in Settings > App Permissions");
-                    LOG.error("3. Edit pg_hba.conf to use 'md5' or 'scram-sha-256' instead of 'trust' for localhost");
-                    LOG.error("   Location: ~/Library/Application Support/Postgres/var-XX/pg_hba.conf");
-                    LOG.error("   Change: 'host all all 127.0.0.1/32 trust' to 'host all all 127.0.0.1/32 md5'");
-                    LOG.error("   Then restart PostgreSQL in Postgres.app");
-                }
-
-                LOG.error("========================================");
-                throw new RuntimeException("Failed to create connection pool for " + connectionId, e);
-            }
-        }
-
-        @Override
-        public Connection getConnection() throws Exception {
-            // DataSource.getConnection() works across classloaders since it's a standard interface
-            return dataSource.getConnection();
-        }
-
-        public String getConnectionId() {
-            return connectionId;
-        }
-
-        public String getDatabaseType() {
-            return databaseType;
-        }
-
-        public String getJdbcUrl() {
-            return jdbcUrl;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public void close() {
-            // Close the DataSource using reflection (HikariDataSource implements AutoCloseable)
-            try {
-                if (dataSource instanceof AutoCloseable) {
-                    ((AutoCloseable) dataSource).close();
-                }
-            } catch (Exception e) {
-                LOG.error("Error closing connection pool for {}: {}", connectionId, e.getMessage(), e);
-            }
-        }
-    }
 }
 

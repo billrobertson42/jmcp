@@ -17,7 +17,7 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
@@ -74,7 +74,7 @@ public class ContextResource implements Resource {
         List<ConnectionSummary> connections = new ArrayList<>();
 
         for (ConnectionInfo info : connectionManager.listConnections()) {
-            ConnectionContext context = connectionManager.getContext(info.id());
+            ConnectionSupplier context = connectionManager.getContext(info.id());
             List<SchemaSummary> schemas = new ArrayList<>();
 
             try (Connection conn = context.getConnection()) {

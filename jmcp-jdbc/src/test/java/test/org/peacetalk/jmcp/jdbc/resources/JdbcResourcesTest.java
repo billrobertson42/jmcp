@@ -20,6 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.resources.*;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;

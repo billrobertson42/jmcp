@@ -23,7 +23,7 @@ import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.Tool;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.config.JdbcConfiguration;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
 import org.peacetalk.jmcp.jdbc.tools.AnalyzeColumnTool;
 import org.peacetalk.jmcp.jdbc.tools.ExplainQueryTool;
@@ -51,7 +51,7 @@ public class JdbcMcpProvider implements McpProvider {
     private static final Logger LOG = LogManager.getLogger(JdbcMcpProvider.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private JdbcDriverManager driverManager;
+    private JdbcDriverClassManager driverManager;
     private ConnectionManager connectionManager;
     private JdbcResourceProvider resourceProvider;
     private final List<Tool> tools;
@@ -82,7 +82,7 @@ public class JdbcMcpProvider implements McpProvider {
         Files.createDirectories(driverCacheDir);
 
         // Initialize driver manager
-        driverManager = new JdbcDriverManager(driverCacheDir);
+        driverManager = new JdbcDriverClassManager(driverCacheDir);
 
         // Initialize connection manager
         connectionManager = new ConnectionManager(driverManager);
@@ -90,15 +90,9 @@ public class JdbcMcpProvider implements McpProvider {
         connectionManager.setExposeUrls(jdbcConfig.expose_urls());
 
         // Register connections from config
-        for (ConnectionConfig conn : jdbcConfig.connections()) {
-            LOG.info("Registering connection: {}", conn.id());
-            connectionManager.registerConnection(
-                conn.id(),
-                conn.databaseType(),
-                conn.jdbcUrl(),
-                conn.username(),
-                conn.password()
-            );
+        for (ConnectionConfig connCfg : jdbcConfig.connections()) {
+            LOG.info("Registering connection: {}", connCfg.id());
+            connectionManager.registerConnection(connCfg);
         }
 
         LOG.info("Driver cache: {}", driverCacheDir);

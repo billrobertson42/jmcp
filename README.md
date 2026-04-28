@@ -130,17 +130,52 @@ corresponding provider by JPMS module name. Create file at its default location 
         "databaseType": "postgresql",
         "jdbcUrl": "jdbc:postgresql://localhost:5432/mydb",
         "username": "user",
-        "password": "pass"
+        "password": "pass",
+        "schemaFilter": ["public", "reporting"]
       }
     ]
   }
 }
 ```
 
+### Connection fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes      | Unique identifier for this connection |
+| `databaseType` | yes      | Database type — see supported types below |
+| `jdbcUrl` | yes      | JDBC connection URL |
+| `username` | yes      | Database username |
+| `password` | yes      | Database password |
+| `schemaFilter` | no       | JSON array of schema names to expose. When omitted, all schemas are visible. Recommended for large databases with many schemas. |
+
+
 ### Config file search order
 
 1. System property: `-Djmcp.config=/path/to/config.json`
 2. Default location: `~/.jmcp/config.json`
+
+### HTTP Proxy for Driver Downloads
+
+JDBC drivers are downloaded from Maven Central on first use. If your environment
+requires an HTTP proxy, configure it using standard Java system properties or
+environment variables — no changes to the config file are needed.
+
+**Java system properties** (pass on the command line or in `run.sh`):
+```
+-Dhttp.proxyHost=proxy.example.com
+-Dhttp.proxyPort=8080
+```
+
+**Environment variables** (upper- or lower-case are both accepted):
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+# or
+export http_proxy=http://proxy.example.com:8080
+```
+
+Resolution order: system properties take precedence over environment variables.
+`HTTP_PROXY` is checked before `HTTPS_PROXY`.
 
 ### Fail-fast initialization
 
@@ -177,4 +212,3 @@ Additionally, database users should have SELECT-only privileges.
 ## License
 
 This project is licensed under the [Apache License, Version 2.0](LICENSE).
-

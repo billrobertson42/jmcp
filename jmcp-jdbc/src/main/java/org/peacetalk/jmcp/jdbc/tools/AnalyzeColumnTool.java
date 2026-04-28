@@ -19,7 +19,7 @@ package org.peacetalk.jmcp.jdbc.tools;
 import org.peacetalk.jmcp.core.schema.IntegerProperty;
 import org.peacetalk.jmcp.core.schema.ObjectSchema;
 import org.peacetalk.jmcp.core.schema.StringProperty;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.JdbcTool;
 import org.peacetalk.jmcp.jdbc.tools.results.ColumnAnalysis;
 import org.peacetalk.jmcp.jdbc.tools.results.ValueFrequency;
@@ -72,7 +72,7 @@ public class AnalyzeColumnTool implements JdbcTool {
     }
 
     @Override
-    public Object execute(JsonNode params, ConnectionContext context) throws Exception {
+    public Object execute(JsonNode params, ConnectionSupplier context) throws Exception {
         String tableName = params.get("table").asString();
         String columnName = params.get("column").asString();
         String schemaName = params.has("schema") ? params.get("schema").asString() : null;

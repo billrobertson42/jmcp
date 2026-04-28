@@ -19,7 +19,7 @@ package test.org.peacetalk.jmcp.jdbc.tools;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.tools.AnalyzeColumnTool;
 import org.peacetalk.jmcp.jdbc.tools.results.ColumnAnalysis;
 import tools.jackson.databind.JsonNode;
@@ -37,7 +37,7 @@ class AnalyzeColumnToolTest {
     private Connection connection;
     private AnalyzeColumnTool tool;
     private ObjectMapper mapper;
-    private ConnectionContext ctx;
+    private ConnectionSupplier ctx;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -65,7 +65,7 @@ class AnalyzeColumnToolTest {
         tool = new AnalyzeColumnTool();
         mapper = new ObjectMapper();
 
-        ctx = new ConnectionContext() {
+        ctx = new ConnectionSupplier() {
             public String getConnectionId() {
                 return "test";
             }

@@ -35,7 +35,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jackson.version>3.1.2</jackson.version>
         <hikari.version>7.0.2</hikari.version>
-        <jdbctl.version>2.0.0-SNAPSHOT</jdbctl.version>
         <junit.version>5.10.1</junit.version>
         <mockito.version>5.21.0</mockito.version>
         <bytebuddy.version>1.18.3</bytebuddy.version>

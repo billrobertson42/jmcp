@@ -41,6 +41,6 @@ public interface JdbcTool {
     /**
      * Execute the tool with given parameters and connection
      */
-    Object execute(JsonNode params, ConnectionContext context) throws Exception;
+    Object execute(JsonNode params, ConnectionSupplier context) throws Exception;
 }
 

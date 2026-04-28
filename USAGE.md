@@ -17,16 +17,31 @@ Create `~/.jmcp/config.json`:
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "mydb",
     "expose_urls": false,
-  "connections": [
-    {
-      "id": "mydb",
-      "databaseType": "postgresql",
-      "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
-      "username": "readonly_user",
-      "password": "secret"
-    }
-  ]
+    "connections": [
+      {
+        "id": "mydb",
+        "databaseType": "postgresql",
+        "jdbcUrl": "jdbc:postgresql://localhost:5432/testdb",
+        "username": "readonly_user",
+        "password": "secret",
+        "schemaFilter": ["public", "reporting"]
+      }
+    ]
+  }
+}
 ```
+
+### Connection fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | yes      | Unique identifier for this connection |
+| `databaseType` | yes      | Database type — see supported types below |
+| `jdbcUrl` | yes      | JDBC connection URL |
+| `username` | yes      | Database username |
+| `password` | yes      | Database password |
+| `schemaFilter` | no       | JSON array of schema names to expose. When omitted, all schemas are visible. Recommended for large databases with many schemas. |
+
 
 The server will:
 - Search for config: `-Djmcp.config` system property → `~/.jmcp/config.json` → `JMCP_CONFIG` env var
@@ -138,7 +153,6 @@ List all schemas/catalogs in the database.
 **Input:**
 ```json
 {
-Get the total number of rows in a table.
   "table": "users",
   "column": "country",
   "schema": "public",
@@ -222,9 +236,26 @@ Or specify the Java command directly:
 If a driver fails to download from Maven Central, check:
 - Internet connectivity
 - Maven Central availability
-    "name": "list-tables",
 
-      "connectionId": "mydb"
+If your environment requires an HTTP proxy, configure it via system properties or
+environment variables — no changes to `config.json` are needed.
+
+**Java system properties** (add to the `java` command in `run.sh`):
+```
+-Dhttp.proxyHost=proxy.example.com
+-Dhttp.proxyPort=8080
+```
+
+**Environment variables** (upper- or lower-case are both accepted):
+```bash
+export HTTP_PROXY=http://proxy.example.com:8080
+# or
+export http_proxy=http://proxy.example.com:8080
+```
+
+Resolution order: system properties take precedence over environment variables.
+`HTTP_PROXY` is checked before `HTTPS_PROXY`.
+
 
 Check:
 - JDBC URL format is correct
@@ -291,4 +322,3 @@ Throw `IllegalStateException` or `IOException` if the config is missing or inval
 
 - Maximum 1000 rows per query result
 - LIMIT syntax may vary by database (standardized in tools)
-

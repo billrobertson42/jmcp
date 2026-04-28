@@ -19,7 +19,7 @@ package test.org.peacetalk.jmcp.jdbc.tools;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.tools.GetRowCountTool;
 import org.peacetalk.jmcp.jdbc.tools.results.RowCountResult;
 import tools.jackson.databind.JsonNode;
@@ -82,7 +82,7 @@ class GetRowCountToolTest {
 
     @Test
     void testExecuteGetRowCount() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("table", "PRODUCTS");

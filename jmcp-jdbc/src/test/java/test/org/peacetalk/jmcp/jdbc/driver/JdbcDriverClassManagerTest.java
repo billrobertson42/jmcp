@@ -20,7 +20,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.peacetalk.jmcp.jdbc.driver.JdbcDriverManager;
+import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 
 import java.nio.file.Path;
@@ -28,16 +28,16 @@ import java.sql.Driver;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class JdbcDriverManagerTest {
+class JdbcDriverClassManagerTest {
 
     @TempDir
     Path tempDir;
 
-    private JdbcDriverManager driverManager;
+    private JdbcDriverClassManager driverManager;
 
     @BeforeEach
     void setUp() throws Exception {
-        driverManager = new JdbcDriverManager(tempDir);
+        driverManager = new JdbcDriverClassManager(tempDir);
     }
 
     @AfterEach

@@ -17,7 +17,7 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 
 import java.sql.Connection;
@@ -69,7 +69,7 @@ public class ViewsListResource implements Resource {
 
     @Override
     public String read() throws Exception {
-        ConnectionContext context = connectionManager.getContext(connectionId);
+        ConnectionSupplier context = connectionManager.getContext(connectionId);
 
         List<ViewEntry> views = new ArrayList<>();
 

@@ -19,7 +19,7 @@ package test.org.peacetalk.jmcp.jdbc.tools;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.tools.ExplainQueryTool;
 import org.peacetalk.jmcp.jdbc.tools.results.ExplainQueryResult;
 import tools.jackson.databind.JsonNode;
@@ -88,7 +88,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testExplainSimpleQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users");
@@ -106,7 +106,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testExplainQueryWithWhere() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users WHERE age > 30");
@@ -121,7 +121,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testExplainQueryWithIndex() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users WHERE age = 25");
@@ -143,7 +143,7 @@ class ExplainQueryToolTest {
             stmt.execute("INSERT INTO orders VALUES (1, 1, 100.00), (2, 2, 200.00)");
         }
 
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id");
@@ -159,7 +159,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testExplainAggregateQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT age, COUNT(*) FROM users GROUP BY age");
@@ -174,7 +174,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testFormatTypeIsSet() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users");
@@ -190,7 +190,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testInvalidQueryThrowsException() {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM nonexistent_table");
@@ -202,7 +202,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testRejectInsertStatement() {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "INSERT INTO users (id, name) VALUES (999, 'Hacker')");
@@ -215,7 +215,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testRejectUpdateStatement() {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "UPDATE users SET name = 'Hacked' WHERE id = 1");
@@ -228,7 +228,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testRejectDeleteStatement() {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "DELETE FROM users WHERE id = 1");
@@ -241,7 +241,7 @@ class ExplainQueryToolTest {
 
     @Test
     void testRejectDropStatement() {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "DROP TABLE users");

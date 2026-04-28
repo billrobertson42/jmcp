@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;

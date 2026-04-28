@@ -53,7 +53,7 @@ public class JdbcToolAdapter implements Tool {
         String connectionId = params.has("database_id") ?
             params.get("database_id").asString() : contextResolver.getDefaultConnectionId();
 
-        ConnectionContext context = contextResolver.getConnectionContext(connectionId);
+        ConnectionSupplier context = contextResolver.getContext(connectionId);
         if (context == null) {
             throw new IllegalArgumentException("Connection not found: " + connectionId);
         }

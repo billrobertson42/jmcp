@@ -19,7 +19,7 @@ package test.org.peacetalk.jmcp.jdbc.tools;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.peacetalk.jmcp.jdbc.ConnectionContext;
+import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.tools.QueryTool;
 import org.peacetalk.jmcp.jdbc.tools.results.CompactQueryResult;
 import tools.jackson.databind.JsonNode;
@@ -84,7 +84,7 @@ class QueryToolTest {
 
     @Test
     void testExecuteSimpleQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users");
@@ -101,7 +101,7 @@ class QueryToolTest {
 
     @Test
     void testExecuteQueryWithWhereClause() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users WHERE age > 28");
@@ -115,7 +115,7 @@ class QueryToolTest {
 
     @Test
     void testRejectNonSelectQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "DELETE FROM users WHERE id = 1");
@@ -128,7 +128,7 @@ class QueryToolTest {
 
     @Test
     void testRejectInsertQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "INSERT INTO users VALUES (4, 'Dave', 40)");
@@ -141,7 +141,7 @@ class QueryToolTest {
 
     @Test
     void testRejectUpdateQuery() throws Exception {
-        ConnectionContext context = () -> connection;
+        ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "UPDATE users SET age = 31 WHERE id = 1");
