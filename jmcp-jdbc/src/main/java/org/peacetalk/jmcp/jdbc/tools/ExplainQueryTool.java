@@ -42,7 +42,10 @@ public class ExplainQueryTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Get the execution plan for a SELECT query to understand performance";
+        return "Get the database's execution plan for a SELECT query, to diagnose performance issues like missing "
+            + "indexes or full table scans. Plan syntax and output format are database-specific (e.g. PostgreSQL "
+            + "EXPLAIN, Oracle EXPLAIN PLAN, SQL Server SHOWPLAN_TEXT) — check the result's 'format' field to see "
+            + "which dialect was used. No query timeout is enforced.";
     }
 
     @Override
