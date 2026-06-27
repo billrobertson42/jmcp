@@ -52,7 +52,10 @@ public class AnalyzeColumnTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Analyze column data: distinct count, nulls, min/max, top values with frequencies.";
+        return "Analyze a column's data distribution: total rows, distinct count, nulls, min/max, and up to "
+            + MAX_TOP_VALUES_COUNT + " most frequent values with counts (default: " + DEFAULT_TOP_VALUES_COUNT
+            + "). Runs full-table-scan queries (COUNT/MIN/MAX and a GROUP BY), so it can be slow on very large "
+            + "tables; no query timeout is enforced.";
     }
 
     @Override
