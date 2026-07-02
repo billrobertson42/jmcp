@@ -50,7 +50,10 @@ public class QueryTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Execute read-only SELECT query. Returns up to " + MAX_ROWS + " rows. Use validate_only=true to check syntax without executing.";
+        return "Execute a read-only SELECT query. Returns up to " + MAX_ROWS + " rows as a compact {cols, rows, count, more} "
+            + "object where 'rows' are arrays positioned to match 'cols' (not keyed objects); 'more'=true means additional "
+            + "rows exist beyond the limit. Bound 'parameters' values are always sent as strings. Query times out after "
+            + QUERY_TIMEOUT_SECONDS + " seconds. Use validate_only=true to check syntax without executing.";
     }
 
     @Override

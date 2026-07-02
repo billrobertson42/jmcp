@@ -51,7 +51,10 @@ public class SampleDataTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Get sample rows from a table. Strategies: 'first', 'random', 'last'. Max " + MAX_SAMPLE_SIZE + " rows.";
+        return "Get sample rows from a table to preview actual data values. Strategies: 'first', 'random', 'last' "
+            + "(default: 'first', " + DEFAULT_SAMPLE_SIZE + " rows). Max " + MAX_SAMPLE_SIZE + " rows. The 'last' "
+            + "strategy requires a primary key to order by; if the table has none, it silently returns the same "
+            + "rows as 'first' instead. No query timeout is enforced.";
     }
 
     @Override

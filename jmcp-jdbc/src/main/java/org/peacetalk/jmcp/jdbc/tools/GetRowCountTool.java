@@ -44,7 +44,9 @@ public class GetRowCountTool implements JdbcTool {
 
     @Override
     public String getDescription() {
-        return "Get exact row count for a table.";
+        return "Get the exact row count for a table via SELECT COUNT(*) (not an estimate). This scans the full "
+            + "table, so it can be slow on very large tables; no query timeout is enforced. For filtered counts, "
+            + "use the query tool with SELECT COUNT(*) ... WHERE instead.";
     }
 
     @Override
