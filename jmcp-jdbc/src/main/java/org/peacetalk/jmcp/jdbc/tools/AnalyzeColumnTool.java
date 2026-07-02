@@ -65,7 +65,7 @@ public class AnalyzeColumnTool implements JdbcTool {
                 "table", new StringProperty("Table name"),
                 "column", new StringProperty("Column name to analyze"),
                 "schema", new StringProperty("Schema name (optional, uses default)"),
-                "top_values", new IntegerProperty("Most common values to return (default: " + DEFAULT_TOP_VALUES_COUNT + ", max: " + MAX_TOP_VALUES_COUNT + ")"),
+                "top_values", new IntegerProperty("Most common values to return (default: " + DEFAULT_TOP_VALUES_COUNT + ")", 1, MAX_TOP_VALUES_COUNT),
                 "database_id", new StringProperty("Database connection ID (optional, uses default)")
             ),
             List.of("table", "column")

@@ -82,7 +82,7 @@ These are the JPMS modules currently included. If you wanted to add your own too
 | **get-row-count** | Get the exact row count for a table |
 | **sample-data** | Get sample rows from a table (`first`, `random`, or `last`; max 100) |
 | **analyze-column** | Analyze a column: distinct count, nulls, min/max, top values |
-| **resource-proxy** | A crucial workaround for clients without MCP resource support (like some IDE Copilots) — exposes robust database resource navigation directly via the tools API |
+| **resource-proxy** | A crucial workaround for clients without MCP resource support (like some IDE Copilots) — exposes robust database resource navigation directly via the tools API (implemented in `jmcp-server`, not `jmcp-jdbc`) |
 
 ## Available Resources
 
@@ -101,9 +101,10 @@ Resources provide navigable, HATEOAS-like access to database metadata. Start at 
 | `db://connection/{id}/schema/{name}/view/{name}` | View definition and metadata |
 | `db://connection/{id}/schema/{name}/procedure/{name}` | Procedure/function signature and parameters |
 | `db://connection/{id}/schema/{name}/relationships` | Schema-wide foreign key relationships |
-| `db://connection/{id}/schema/{name}/table/{name}/relationships` | Foreign key relationships for a specific table |
 
 > **Note:** Clients that don't support the MCP resources protocol (e.g., some IDE Copilots) can access all resources via the resource-proxy tool.
+
+> **Note:** `schema/{name}` already embeds `tables[]`/`views[]`/`procedures[]` with navigation links, so a model that's already fetched a schema doesn't need the `.../tables` or `.../views` list resources — they add only `REMARKS`/`TABLE_TYPE` beyond what the schema resource already has.
 
 ## "Human-in-the-Loop" Architecture & Testing
 

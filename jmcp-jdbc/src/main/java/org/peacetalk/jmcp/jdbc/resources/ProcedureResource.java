@@ -34,6 +34,11 @@ import static org.peacetalk.jmcp.jdbc.resources.Util.*;
  * URI: db://connection/{id}/schema/{schema}/procedure/{procedure}
  *
  * Returns detailed procedure/function information including parameters, definition, and metadata.
+ *
+ * {@code definition} is resolved for Postgres, MySQL/MariaDB, Oracle, and SQL Server; {@code language}
+ * and {@code isDeterministic} are resolved only for Postgres and MySQL/MariaDB. On any other dialect,
+ * or for these unsupported combinations, the fields are {@code null} because the lookup isn't
+ * implemented for that dialect — not because the procedure has no body or is a wrapper.
  */
 public class ProcedureResource implements Resource {
     private final String connectionId;
@@ -61,7 +66,11 @@ public class ProcedureResource implements Resource {
 
     @Override
     public String getDescription() {
-        return "Stored procedure or function with parameters, definition, and metadata.";
+        return "Stored procedure or function with parameters, definition, and metadata. "
+            + "definition/language/isDeterministic are null on dialects where the lookup isn't "
+            + "implemented (definition: Postgres/MySQL/MariaDB/Oracle/SQL Server only; "
+            + "language/isDeterministic: Postgres/MySQL/MariaDB only) — null doesn't mean the "
+            + "procedure lacks a body.";
     }
 
     @Override

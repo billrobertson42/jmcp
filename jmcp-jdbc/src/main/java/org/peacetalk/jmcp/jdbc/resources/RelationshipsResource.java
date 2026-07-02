@@ -17,7 +17,7 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
+import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 
 import java.sql.Connection;
@@ -73,7 +73,7 @@ public class RelationshipsResource implements Resource {
 
     @Override
     public String read() throws Exception {
-        ConnectionSupplier context = connectionManager.getContext(connectionId);
+        ConnectionContext context = connectionManager.getContext(connectionId);
         List<Relationship> relationships = new ArrayList<>();
 
         // For topological sort: map of "schema.table" -> dependencies
@@ -87,7 +87,10 @@ public class RelationshipsResource implements Resource {
             List<String> schemas = new ArrayList<>();
             try (ResultSet rs = metaData.getSchemas()) {
                 while (rs.next()) {
-                    schemas.add(rs.getString("TABLE_SCHEM"));
+                    String schemaName = rs.getString("TABLE_SCHEM");
+                    if (context.isSchemaVisible(schemaName)) {
+                        schemas.add(schemaName);
+                    }
                 }
             }
 
