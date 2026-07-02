@@ -63,7 +63,7 @@ public class SampleDataTool implements JdbcTool {
             Map.of(
                 "table", new StringProperty("Table name"),
                 "schema", new StringProperty("Schema name (optional, uses default)"),
-                "sample_size", new IntegerProperty("Rows to sample (default: " + DEFAULT_SAMPLE_SIZE + ", max: " + MAX_SAMPLE_SIZE + ")"),
+                "sample_size", new IntegerProperty("Rows to sample (default: " + DEFAULT_SAMPLE_SIZE + ")", 1, MAX_SAMPLE_SIZE),
                 "strategy", new StringProperty("Sampling strategy: 'first', 'random', 'last' (default: first)"),
                 "columns", new StringProperty("Comma-separated column names (optional, default: all)"),
                 "database_id", new StringProperty("Database connection ID (optional, uses default)")

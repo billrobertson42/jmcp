@@ -72,6 +72,7 @@ class JdbcResourcesTest {
         mockConnectionManager = mock(ConnectionManager.class);
         ConnectionContext mockContext = mock(ConnectionContext.class);
         when(mockContext.getConnection()).thenReturn(connection);
+        when(mockContext.isSchemaVisible(anyString())).thenReturn(true);
         when(mockConnectionManager.getContext("testdb")).thenReturn(mockContext);
         when(mockConnectionManager.listConnections()).thenReturn(List.of(
             new ConnectionInfo("testdb", "jdbc:h2:mem:resourcetest", "sa", "h2")

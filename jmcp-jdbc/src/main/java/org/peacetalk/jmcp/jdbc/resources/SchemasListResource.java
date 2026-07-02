@@ -18,7 +18,6 @@ package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
-import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 
 import java.sql.Connection;
@@ -26,7 +25,6 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -71,7 +69,6 @@ public class SchemasListResource implements Resource {
         ConnectionContext context = connectionManager.getContext(connectionId);
 
         List<SchemaEntry> schemas = new ArrayList<>();
-        Set<String> filter = context.getSchemaFilter();
 
         try (Connection conn = context.getConnection()) {
             DatabaseMetaData metaData = conn.getMetaData();
@@ -83,7 +80,7 @@ public class SchemasListResource implements Resource {
                     String catalogName = rs.getString("TABLE_CATALOG");
                     boolean isDefault = schemaName != null && schemaName.equals(defaultSchema);
 
-                    if(filter.isEmpty() || filter.contains(schemaName)) {
+                    if (context.isSchemaVisible(schemaName)) {
                         schemas.add(new SchemaEntry(
                             schemaName,
                             catalogName,

@@ -8,9 +8,7 @@ import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Driver;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
 
 /**
  * Connection pool with isolated classloader for driver and HikariCP
@@ -87,8 +85,9 @@ public class ConnectionContext implements ConnectionSupplier {
         return config.username();
     }
 
-    public Set<String> getSchemaFilter() {
-        return Collections.unmodifiableSet(new HashSet<>(config.schemaFilter()));
+    public boolean isSchemaVisible(String schemaName) {
+        List<String> filter = config.schemaFilter();
+        return filter.isEmpty() || filter.contains(schemaName);
     }
 
     public void close() {

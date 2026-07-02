@@ -17,7 +17,7 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
+import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
@@ -74,7 +74,7 @@ public class ContextResource implements Resource {
         List<ConnectionSummary> connections = new ArrayList<>();
 
         for (ConnectionInfo info : connectionManager.listConnections()) {
-            ConnectionSupplier context = connectionManager.getContext(info.id());
+            ConnectionContext context = connectionManager.getContext(info.id());
             List<SchemaSummary> schemas = new ArrayList<>();
 
             try (Connection conn = context.getConnection()) {
@@ -86,6 +86,7 @@ public class ContextResource implements Resource {
                     while (rs.next()) {
                         String schemaName = rs.getString("TABLE_SCHEM");
                         if (schemaName == null) continue;
+                        if (!context.isSchemaVisible(schemaName)) continue;
 
                         // Count tables, views, and procedures for this schema
                         int tableCount = 0;
@@ -223,6 +224,16 @@ public class ContextResource implements Resource {
                 "db://connection/{database_id}/schema/{schema_name}/relationships",
                 "Schema FK relationships",
                 "FK relationships within and across schema boundaries with copy order"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/tables",
+                "List of tables",
+                "Tables in this schema with navigation URIs"
+            ),
+            new ResourceTemplate(
+                "db://connection/{database_id}/schema/{schema_name}/views",
+                "List of views",
+                "Views in this schema with navigation URIs"
             ),
             new ResourceTemplate(
                 "db://connection/{database_id}/schema/{schema_name}/table/{table_name}",
