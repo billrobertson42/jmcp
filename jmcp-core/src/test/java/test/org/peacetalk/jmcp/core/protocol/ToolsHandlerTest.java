@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ToolsHandlerTest {
@@ -65,11 +66,11 @@ class ToolsHandlerTest {
         assertNull(response.error());
         assertNotNull(response.result());
 
-        JsonNode result = mapper.valueToTree(response.result());
-        assertTrue(result.has("tools"), "result must contain a 'tools' array field");
-        assertTrue(result.get("tools").isArray());
-        assertEquals(0, result.get("tools").size(),
-            "with no providers the tools list must be empty (not null/absent)");
+        // Whole-shape comparison: with no providers registered, the entire result
+        // must be exactly {"tools":[]} — not merely "has a tools array somewhere".
+        assertThatJson(mapper.writeValueAsString(response.result()))
+            .isEqualTo("""
+                    {"tools":[]}""");
     }
 
     @Test
@@ -81,19 +82,18 @@ class ToolsHandlerTest {
         JsonRpcResponse response = handler.handle(request);
 
         assertNull(response.error());
-        JsonNode tools = mapper.valueToTree(response.result()).get("tools");
-        assertEquals(4, tools.size(), "all four tools from both providers must be listed");
 
-        List<String> names = new ArrayList<>();
-        for (JsonNode tool : tools) {
-            names.add(tool.get("name").asString());
-            assertTrue(tool.has("description"), "each tool must carry its description");
-            assertTrue(tool.has("inputSchema"), "each tool must carry its input schema");
-            assertEquals("object", tool.get("inputSchema").get("type").asString(),
-                "MockTool schema type must be propagated verbatim");
-        }
-        assertTrue(names.containsAll(List.of("tool1", "tool2", "tool3", "tool4")),
-            "listed tool names must include every provider's tools, got: " + names);
+        assertThatJson(mapper.writeValueAsString(response.result()))
+            .node("tools").isArray()
+            .describedAs("all four tools from both providers must be listed")
+            .hasSize(4)
+            .allSatisfy(tool -> assertThatJson(tool).and(
+                j -> j.isObject().containsKeys("name", "description", "inputSchema"),
+                j -> j.node("inputSchema.type").isEqualTo("object")
+                    .describedAs("MockTool schema type must be propagated verbatim")
+            ))
+            .extracting("name")
+            .containsExactlyInAnyOrder("tool1", "tool2", "tool3", "tool4");
     }
 
     // ---- tools/call: success -------------------------------------------------
@@ -108,18 +108,18 @@ class ToolsHandlerTest {
         JsonRpcResponse response = handler.handle(request);
 
         assertNull(response.error(), "a successful tool call must not be a JSON-RPC error");
-        JsonNode result = mapper.valueToTree(response.result());
-        assertFalse(result.has("isError") && result.get("isError").asBoolean(),
-            "successful tool call must not set isError=true");
 
-        JsonNode content = result.get("content");
-        assertNotNull(content, "result must contain content array");
-        assertEquals(1, content.size());
-        assertEquals("text", content.get(0).get("type").asString());
         // ToolsHandler JSON-serializes the tool's return value into the text field.
-        // MockTool returns the String "Result from test_tool", which serializes to a quoted JSON string.
-        assertEquals("\"Result from test_tool\"", content.get(0).get("text").asString(),
-            "text content must be the JSON-serialized tool result");
+        // MockTool returns the String "Result from test_tool", which serializes to a quoted
+        // JSON string — so the actual text VALUE itself contains literal quote characters.
+        // .isString() switches to a plain AssertJ string comparison for that node so json-unit
+        // doesn't try to re-parse the expected value as JSON (which would strip a layer of quoting).
+        assertThatJson(mapper.writeValueAsString(response.result())).and(
+            j -> j.node("isError").isAbsent(),
+            j -> j.node("content").isArray().hasSize(1),
+            j -> j.node("content[0].type").isEqualTo("text"),
+            j -> j.node("content[0].text").isString().isEqualTo("\"Result from test_tool\"")
+        );
     }
 
     @Test
@@ -194,12 +194,15 @@ class ToolsHandlerTest {
         assertNull(response.error(),
             "a throwing tool must NOT surface as a JSON-RPC protocol error");
         assertNotNull(response.result());
-        JsonNode result = mapper.valueToTree(response.result());
-        assertTrue(result.get("isError").asBoolean(),
-            "a throwing tool must set isError=true on the result");
-        assertTrue(result.get("content").get(0).get("text").asString().contains("kaboom"),
-            "error content should surface the failure message: "
-                + result.get("content").get(0).get("text").asString());
+
+        assertThatJson(mapper.writeValueAsString(response.result())).and(
+            j -> j.node("isError")
+                .describedAs("a throwing tool must set isError=true on the result")
+                .isEqualTo(true),
+            j -> j.node("content[0].text").isString()
+                .describedAs("error content should surface the failure message")
+                .contains("kaboom")
+        );
     }
 
     // ---- unknown method ------------------------------------------------------

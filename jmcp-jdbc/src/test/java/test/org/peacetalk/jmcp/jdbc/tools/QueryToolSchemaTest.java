@@ -25,6 +25,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -139,30 +140,20 @@ class QueryToolSchemaTest {
         QueryTool tool = new QueryTool();
         JsonNode schema = tool.getInputSchema();
 
-        // Verify schema structure
-        assertEquals("object", schema.get("type").asText());
-
-        JsonNode properties = schema.get("properties");
-        assertTrue(properties.has("sql"), "Schema should have 'sql' property");
-        assertTrue(properties.has("parameters"), "Schema should have 'parameters' property");
-
-        // Verify sql property
-        JsonNode sqlProp = properties.get("sql");
-        assertEquals("string", sqlProp.get("type").asText());
-        assertTrue(sqlProp.has("description"));
-
-        // Verify parameters property
-        JsonNode paramsProp = properties.get("parameters");
-        assertEquals("array", paramsProp.get("type").asText());
-        assertTrue(paramsProp.has("description"));
-        assertTrue(paramsProp.has("items"));
-        assertEquals("string", paramsProp.get("items").get("type").asText());
-
-        // Verify required fields
-        JsonNode required = schema.get("required");
-        assertTrue(required.isArray());
-        assertEquals(1, required.size());
-        assertEquals("sql", required.get(0).asText());
+        assertThatJson(MAPPER.writeValueAsString(schema)).and(
+            j -> j.node("type").isEqualTo("object"),
+            j -> j.node("properties.sql.type")
+                .describedAs("Schema should have 'sql' property of type string")
+                .isEqualTo("string"),
+            j -> j.node("properties.sql.description").isPresent(),
+            j -> j.node("properties.parameters.type")
+                .describedAs("Schema should have 'parameters' property of type array")
+                .isEqualTo("array"),
+            j -> j.node("properties.parameters.description").isPresent(),
+            j -> j.node("properties.parameters.items.type").isEqualTo("string"),
+            j -> j.node("required").isArray().hasSize(1),
+            j -> j.node("required[0]").isEqualTo("sql")
+        );
     }
 }
 

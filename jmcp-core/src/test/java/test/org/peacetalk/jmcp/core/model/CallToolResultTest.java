@@ -19,11 +19,11 @@ package test.org.peacetalk.jmcp.core.model;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.CallToolResult;
 import org.peacetalk.jmcp.core.model.Content;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
@@ -78,30 +78,23 @@ class CallToolResultTest {
     @Test
     void testSuccessResultSerializesExactShapeAndOmitsIsError() {
         // A successful result has isError == null, which must be omitted (NON_NULL).
+        // Whole-shape comparison also confirms no other field (like isError) leaks in.
         CallToolResult result = CallToolResult.text("Test data");
 
-        JsonNode node = mapper.valueToTree(result);
-
-        assertTrue(node.has("content"), "result must serialize the 'content' field");
-        assertTrue(node.get("content").isArray(), "content must serialize as a JSON array");
-        assertEquals(1, node.get("content").size());
-        assertEquals("text", node.get("content").get(0).get("type").asText());
-        assertEquals("Test data", node.get("content").get(0).get("text").asText());
-        assertFalse(node.has("isError"), "null isError must be omitted (NON_NULL)");
-        assertEquals(1, node.size(), "successful result should serialize exactly the content field");
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[{"type":"text","text":"Test data"}]}""");
     }
 
     @Test
     void testErrorResultSerializesIsErrorTrue() {
-        // An error result must serialize isError=true under the exact JSON key "isError".
+        // An error result must serialize isError=true (a JSON boolean, not the string
+        // "true") under the exact JSON key "isError".
         CallToolResult result = CallToolResult.error("boom");
 
-        JsonNode node = mapper.valueToTree(result);
-
-        assertTrue(node.has("isError"), "error result must serialize the 'isError' field");
-        assertTrue(node.get("isError").isBoolean(), "isError must serialize as a JSON boolean");
-        assertTrue(node.get("isError").booleanValue(), "error result must serialize isError=true");
-        assertEquals("boom", node.get("content").get(0).get("text").asText());
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[{"type":"text","text":"boom"}],"isError":true}""");
     }
 
     @Test
@@ -110,11 +103,9 @@ class CallToolResultTest {
         // serialize as [] rather than being omitted or written as null.
         CallToolResult result = new CallToolResult(null, null);
 
-        JsonNode node = mapper.valueToTree(result);
-
-        assertTrue(node.has("content"), "content must always be present, even when empty");
-        assertTrue(node.get("content").isArray());
-        assertEquals(0, node.get("content").size(), "coerced-empty content must serialize as []");
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[]}""");
     }
 
     @Test

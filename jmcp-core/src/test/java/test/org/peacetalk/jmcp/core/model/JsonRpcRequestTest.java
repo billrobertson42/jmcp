@@ -18,9 +18,9 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the JSON-RPC 2.0 wire spec
@@ -75,23 +75,18 @@ class JsonRpcRequestTest {
         // and jsonrpc/method must use their exact JSON keys.
         JsonRpcRequest request = new JsonRpcRequest("2.0", null, "tools/list", null);
 
-        JsonNode node = mapper.valueToTree(request);
-
-        assertEquals("2.0", node.get("jsonrpc").asText(), "version must serialize under key 'jsonrpc'");
-        assertEquals("tools/list", node.get("method").asText(), "method must serialize under key 'method'");
-        assertFalse(node.has("id"), "null id must be omitted (NON_NULL)");
-        assertFalse(node.has("params"), "null params must be omitted (NON_NULL)");
-        assertEquals(2, node.size(), "notification-style request should serialize exactly jsonrpc + method");
+        assertThatJson(mapper.writeValueAsString(request))
+            .isEqualTo("""
+                    {"jsonrpc":"2.0","method":"tools/list"}""");
     }
 
     @Test
     void testSerializesIdAndParamsWhenPresent() {
         JsonRpcRequest request = new JsonRpcRequest("2.0", 7, "ping", "some-params");
 
-        JsonNode node = mapper.valueToTree(request);
-
-        assertEquals(7, node.get("id").intValue(), "numeric id must serialize under key 'id'");
-        assertEquals("some-params", node.get("params").asText(), "params must serialize under key 'params'");
+        assertThatJson(mapper.writeValueAsString(request))
+            .isEqualTo("""
+                    {"jsonrpc":"2.0","id":7,"method":"ping","params":"some-params"}""");
     }
 
     @Test

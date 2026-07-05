@@ -32,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class QueryToolTest {
@@ -79,9 +80,11 @@ class QueryToolTest {
     void testGetInputSchema() {
         JsonNode schema = queryTool.getInputSchema();
         assertNotNull(schema);
-        assertEquals("object", schema.get("type").asText());
-        assertTrue(schema.has("properties"));
-        assertTrue(schema.get("properties").has("sql"));
+
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("type").isEqualTo("object"),
+            j -> j.node("properties.sql").isPresent()
+        );
     }
 
     @Test

@@ -27,5 +27,7 @@ open module org.peacetalk.jmcp.jdbc.test {
     requires com.networknt.schema;
     requires org.snakeyaml.engine.v2;
     requires org.apache.logging.log4j;
+    requires net.javacrumbs.jsonunit.assertj;
+    requires org.assertj.core;
 }
 

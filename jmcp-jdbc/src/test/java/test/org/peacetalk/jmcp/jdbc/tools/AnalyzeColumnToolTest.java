@@ -32,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AnalyzeColumnToolTest {
@@ -113,14 +114,19 @@ class AnalyzeColumnToolTest {
     void testGetInputSchema() {
         JsonNode schema = tool.getInputSchema();
         assertNotNull(schema);
-        assertTrue(schema.isObject());
-        JsonNode properties = schema.get("properties");
-        assertTrue(properties.has("table"));
-        assertTrue(properties.has("column"));
-        // top_values is bounded 1..50 per MAX_TOP_VALUES_COUNT.
-        JsonNode topValues = properties.get("top_values");
-        assertEquals(1, topValues.get("minimum").asInt(), "top_values minimum should be 1");
-        assertEquals(50, topValues.get("maximum").asInt(), "top_values maximum should be 50");
+
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("type").isEqualTo("object"),
+            j -> j.node("properties.table").isPresent(),
+            j -> j.node("properties.column").isPresent(),
+            // top_values is bounded 1..50 per MAX_TOP_VALUES_COUNT.
+            j -> j.node("properties.top_values.minimum")
+                .describedAs("top_values minimum should be 1")
+                .isEqualTo(1),
+            j -> j.node("properties.top_values.maximum")
+                .describedAs("top_values maximum should be 50")
+                .isEqualTo(50)
+        );
     }
 
     @Test

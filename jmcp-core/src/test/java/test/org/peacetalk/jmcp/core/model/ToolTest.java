@@ -22,6 +22,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
@@ -85,13 +86,16 @@ class ToolTest {
 
         Tool tool = new Tool("test-tool", "A test tool", schema);
 
-        JsonNode node = mapper.valueToTree(tool);
-
-        assertEquals("test-tool", node.get("name").asText(), "name must serialize under key 'name'");
-        assertEquals("A test tool", node.get("description").asText(),
-            "description must serialize under key 'description'");
-        assertTrue(node.has("inputSchema"), "schema must serialize under key 'inputSchema'");
-        assertEquals(3, node.size(), "tool with description should serialize exactly name + description + inputSchema");
+        // Node-path style (not whole-document): inputSchema's own nested content is
+        // deliberately NOT pinned here (see testRoundTripPreservesSchema for that) —
+        // asserting the whole document would needlessly couple this wire-contract
+        // test to the nested schema's internal shape.
+        assertThatJson(mapper.writeValueAsString(tool)).and(
+            j -> j.node("name").isEqualTo("test-tool"),
+            j -> j.node("description").isEqualTo("A test tool"),
+            j -> j.node("inputSchema").isPresent(),
+            j -> j.isObject().hasSize(3)
+        );
     }
 
     @Test
@@ -101,12 +105,9 @@ class ToolTest {
         JsonNode schema = mapper.createObjectNode().put("type", "object");
         Tool tool = new Tool("test-tool", null, schema);
 
-        JsonNode node = mapper.valueToTree(tool);
-
-        assertFalse(node.has("description"), "null description must be omitted (NON_NULL)");
-        assertTrue(node.has("name"));
-        assertTrue(node.has("inputSchema"));
-        assertEquals(2, node.size(), "tool without description should serialize exactly name + inputSchema");
+        assertThatJson(mapper.writeValueAsString(tool))
+            .isEqualTo("""
+                    {"name":"test-tool","inputSchema":{"type":"object"}}""");
     }
 
     @Test

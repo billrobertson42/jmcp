@@ -30,10 +30,10 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContextResourceTest {
@@ -152,14 +152,13 @@ class ContextResourceTest {
 
     @Test
     void testReadReportsConnectionIdentity() throws Exception {
-        JsonNode root = mapper.readTree(contextResource.read());
-
-        JsonNode connections = root.get("connections");
-        assertEquals(1, connections.size(), "Only the 'test' connection is registered");
-
-        JsonNode conn = connections.get(0);
-        assertEquals("test", conn.get("databaseId").asString());
-        assertEquals("h2", conn.get("databaseType").asString());
+        assertThatJson(contextResource.read()).and(
+            j -> j.node("connections").isArray()
+                .describedAs("Only the 'test' connection is registered")
+                .hasSize(1),
+            j -> j.node("connections[0].databaseId").isEqualTo("test"),
+            j -> j.node("connections[0].databaseType").isEqualTo("h2")
+        );
     }
 
     @Test
@@ -199,19 +198,12 @@ class ContextResourceTest {
         }
         assertNotNull(filteredConn, "The filtered connection should appear in the context summary");
 
-        List<String> schemaNames = new ArrayList<>();
-        for (JsonNode schema : filteredConn.get("schemas")) {
-            schemaNames.add(schema.get("name").asString());
-        }
-
-        assertTrue(schemaNames.contains("VISIBLE_SCHEMA"),
-            "Schema present in the filter should be visible: " + schemaNames);
-        assertTrue(schemaNames.contains("PUBLIC"),
-            "PUBLIC is in the filter and should be visible: " + schemaNames);
-        assertFalse(schemaNames.contains("HIDDEN_SCHEMA"),
-            "Schema omitted from the filter must be excluded: " + schemaNames);
-        assertFalse(schemaNames.contains("INFORMATION_SCHEMA"),
-            "INFORMATION_SCHEMA is not in the filter and must be excluded: " + schemaNames);
+        assertThatJson(mapper.writeValueAsString(filteredConn))
+            .inPath("$.schemas[*].name")
+            .isArray()
+            .describedAs("schema names visible under the 'filtered' connection")
+            .contains("VISIBLE_SCHEMA", "PUBLIC")
+            .doesNotContain("HIDDEN_SCHEMA", "INFORMATION_SCHEMA");
     }
 
     @Test

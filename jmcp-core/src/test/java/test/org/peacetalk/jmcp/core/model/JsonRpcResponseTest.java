@@ -19,9 +19,9 @@ package test.org.peacetalk.jmcp.core.model;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the JSON-RPC 2.0 wire spec
@@ -90,13 +90,9 @@ class JsonRpcResponseTest {
         // A success response must contain result and omit error (NON_NULL).
         JsonRpcResponse response = JsonRpcResponse.success(1, "the-result");
 
-        JsonNode node = mapper.valueToTree(response);
-
-        assertEquals("2.0", node.get("jsonrpc").asText());
-        assertEquals(1, node.get("id").intValue());
-        assertEquals("the-result", node.get("result").asText(), "result must serialize under key 'result'");
-        assertFalse(node.has("error"), "null error must be omitted from a success response (NON_NULL)");
-        assertEquals(3, node.size(), "success response should serialize exactly jsonrpc + id + result");
+        assertThatJson(mapper.writeValueAsString(response))
+            .isEqualTo("""
+                    {"jsonrpc":"2.0","id":1,"result":"the-result"}""");
     }
 
     @Test
@@ -105,15 +101,9 @@ class JsonRpcResponseTest {
         JsonRpcError error = new JsonRpcError(-32601, "Method not found: x", null);
         JsonRpcResponse response = JsonRpcResponse.error(9, error);
 
-        JsonNode node = mapper.valueToTree(response);
-
-        assertEquals("2.0", node.get("jsonrpc").asText());
-        assertEquals(9, node.get("id").intValue());
-        assertTrue(node.has("error"), "error response must serialize the 'error' field");
-        assertFalse(node.has("result"), "null result must be omitted from an error response (NON_NULL)");
-        assertEquals(-32601, node.get("error").get("code").intValue(),
-            "nested error code must serialize under 'error.code'");
-        assertEquals("Method not found: x", node.get("error").get("message").asText());
+        assertThatJson(mapper.writeValueAsString(response))
+            .isEqualTo("""
+                    {"jsonrpc":"2.0","id":9,"error":{"code":-32601,"message":"Method not found: x"}}""");
     }
 
     @Test

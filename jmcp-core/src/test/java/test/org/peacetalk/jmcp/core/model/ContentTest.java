@@ -18,9 +18,9 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.Content;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
@@ -91,13 +91,9 @@ class ContentTest {
         // fields (data, mimeType) omitted because of @JsonInclude(NON_NULL).
         Content content = Content.text("Hello, world!");
 
-        JsonNode node = mapper.valueToTree(content);
-
-        assertEquals("text", node.get("type").asText(), "type field must be the JSON key 'type'");
-        assertEquals("Hello, world!", node.get("text").asText(), "text field must be the JSON key 'text'");
-        assertFalse(node.has("data"), "null data must be omitted for text content (NON_NULL)");
-        assertFalse(node.has("mimeType"), "null mimeType must be omitted for text content (NON_NULL)");
-        assertEquals(2, node.size(), "text content should serialize exactly 2 fields");
+        assertThatJson(mapper.writeValueAsString(content))
+            .isEqualTo("""
+                    {"type":"text","text":"Hello, world!"}""");
     }
 
     @Test
@@ -105,13 +101,9 @@ class ContentTest {
         // Serialized image content must contain type + data + mimeType, with text omitted.
         Content content = Content.image("base64data", "image/png");
 
-        JsonNode node = mapper.valueToTree(content);
-
-        assertEquals("image", node.get("type").asText());
-        assertEquals("base64data", node.get("data").asText(), "data field must be the JSON key 'data'");
-        assertEquals("image/png", node.get("mimeType").asText(), "mimeType field must be the JSON key 'mimeType'");
-        assertFalse(node.has("text"), "null text must be omitted for image content (NON_NULL)");
-        assertEquals(3, node.size(), "image content should serialize exactly 3 fields");
+        assertThatJson(mapper.writeValueAsString(content))
+            .isEqualTo("""
+                    {"type":"image","data":"base64data","mimeType":"image/png"}""");
     }
 
     @Test

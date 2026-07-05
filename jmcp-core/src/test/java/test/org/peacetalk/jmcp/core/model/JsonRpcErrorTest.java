@@ -18,9 +18,9 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 // NOTE: exact-key-name/field-count checks below pin the JSON-RPC 2.0 wire spec
@@ -96,13 +96,9 @@ class JsonRpcErrorTest {
         // code is a primitive int (always serialized); message present; null data omitted (NON_NULL).
         JsonRpcError error = new JsonRpcError(-32601, "Method not found: foo", null);
 
-        JsonNode node = mapper.valueToTree(error);
-
-        assertEquals(-32601, node.get("code").intValue(), "code must serialize under the JSON key 'code'");
-        assertEquals("Method not found: foo", node.get("message").asText(),
-            "message must serialize under the JSON key 'message'");
-        assertFalse(node.has("data"), "null data must be omitted (NON_NULL)");
-        assertEquals(2, node.size(), "error with null data should serialize exactly code + message");
+        assertThatJson(mapper.writeValueAsString(error))
+            .isEqualTo("""
+                    {"code":-32601,"message":"Method not found: foo"}""");
     }
 
     @Test
@@ -112,20 +108,18 @@ class JsonRpcErrorTest {
         //  that the field is never dropped for the default-looking value).
         JsonRpcError error = new JsonRpcError(0, "zero code", null);
 
-        JsonNode node = mapper.valueToTree(error);
-
-        assertTrue(node.has("code"), "primitive int code must always be serialized, even when 0");
-        assertEquals(0, node.get("code").intValue());
+        assertThatJson(mapper.writeValueAsString(error))
+            .isEqualTo("""
+                    {"code":0,"message":"zero code"}""");
     }
 
     @Test
     void testDataSerializedWhenPresent() {
         JsonRpcError error = new JsonRpcError(-32000, "custom", "extra-detail");
 
-        JsonNode node = mapper.valueToTree(error);
-
-        assertTrue(node.has("data"), "non-null data must be serialized");
-        assertEquals("extra-detail", node.get("data").asText());
+        assertThatJson(mapper.writeValueAsString(error))
+            .isEqualTo("""
+                    {"code":-32000,"message":"custom","data":"extra-detail"}""");
     }
 
     @Test

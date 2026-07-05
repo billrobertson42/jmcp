@@ -23,13 +23,13 @@ import org.peacetalk.jmcp.core.ResourceProvider;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import org.peacetalk.jmcp.core.protocol.ResourcesHandler;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.List;
 import java.util.Set;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -68,14 +68,12 @@ class ResourcesHandlerTest {
         assertNull(response.error());
         assertNotNull(response.result());
 
-        JsonNode result = mapper.valueToTree(response.result());
-        assertTrue(result.has("resources"));
-        assertEquals(2, result.get("resources").size());
-
-        // Check first resource
-        JsonNode firstResource = result.get("resources").get(0);
-        assertEquals("test://root", firstResource.get("uri").asString());
-        assertEquals("Test Root", firstResource.get("name").asString());
+        assertThatJson(mapper.writeValueAsString(response.result()))
+            .isEqualTo("""
+                    {"resources":[
+                        {"uri":"test://root","name":"Test Root","description":"Test resource: Test Root","mimeType":"application/json"},
+                        {"uri":"test://child","name":"Test Child","description":"Test resource: Test Child","mimeType":"application/json"}
+                    ]}""");
     }
 
     @Test
@@ -102,15 +100,16 @@ class ResourcesHandlerTest {
         assertNull(response.error());
         assertNotNull(response.result());
 
-        JsonNode result = mapper.valueToTree(response.result());
-        assertTrue(result.has("contents"));
-        assertEquals(1, result.get("contents").size());
-
-        JsonNode content = result.get("contents").get(0);
-        assertEquals("test://root", content.get("uri").asString());
-        assertEquals("application/json", content.get("mimeType").asString());
-        assertEquals("""
-                {"data":"root"}""", content.get("text").asString());
+        // .isString() before the final isEqualTo() is required for the "text" node:
+        // its value is itself JSON-shaped ({"data":"root"}), so without .isString()
+        // json-unit would try to re-parse the expected argument as JSON instead of
+        // comparing it as a plain string.
+        assertThatJson(mapper.writeValueAsString(response.result())).and(
+            j -> j.node("contents").isArray().hasSize(1),
+            j -> j.node("contents[0].uri").isEqualTo("test://root"),
+            j -> j.node("contents[0].mimeType").isEqualTo("application/json"),
+            j -> j.node("contents[0].text").isString().isEqualTo("{\"data\":\"root\"}")
+        );
     }
 
     @Test
@@ -179,17 +178,12 @@ class ResourcesHandlerTest {
         assertNotNull(response);
         assertNull(response.error());
 
-        JsonNode result = mapper.valueToTree(response.result());
         // Aggregates both providers: 2 from testProvider + 1 from the other = exactly 3.
-        JsonNode resources = result.get("resources");
-        assertEquals(3, resources.size(), "list must aggregate every provider's resources");
-        boolean hasOther = false;
-        for (int i = 0; i < resources.size(); i++) {
-            if ("other://data".equals(resources.get(i).get("uri").asString())) {
-                hasOther = true;
-            }
-        }
-        assertTrue(hasOther, "the second provider's resource must appear in the aggregated list");
+        assertThatJson(mapper.writeValueAsString(response.result()))
+            .node("resources").isArray()
+            .hasSize(3)
+            .extracting("uri")
+            .contains("other://data");
     }
 
     @Test
@@ -208,11 +202,12 @@ class ResourcesHandlerTest {
         assertNull(response.error());
 
         // The content must come from the SECOND provider, not be misrouted to the first.
-        JsonNode content = mapper.valueToTree(response.result()).get("contents").get(0);
-        assertEquals("other://data", content.get("uri").asString());
-        assertEquals("""
-                {"data":"other"}""", content.get("text").asString(),
-            "read must be dispatched to the provider whose scheme matches the URI");
+        assertThatJson(mapper.writeValueAsString(response.result())).and(
+            j -> j.node("contents[0].uri").isEqualTo("other://data"),
+            j -> j.node("contents[0].text").isString()
+                .describedAs("read must be dispatched to the provider whose scheme matches the URI")
+                .isEqualTo("{\"data\":\"other\"}")
+        );
     }
 
     @Test

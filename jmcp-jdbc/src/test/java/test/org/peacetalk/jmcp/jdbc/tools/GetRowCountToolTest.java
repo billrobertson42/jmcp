@@ -31,6 +31,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class GetRowCountToolTest {
@@ -84,10 +85,14 @@ class GetRowCountToolTest {
     void testGetInputSchema() {
         JsonNode schema = getRowCountTool.getInputSchema();
         assertNotNull(schema);
-        assertTrue(schema.get("properties").has("table"));
-        JsonNode required = schema.get("required");
-        assertTrue(required.isArray());
-        assertEquals("table", required.get(0).asText(), "'table' must be the required field");
+
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("properties.table").isPresent(),
+            j -> j.node("required").isArray(),
+            j -> j.node("required[0]")
+                .describedAs("'table' must be the required field")
+                .isEqualTo("table")
+        );
     }
 
     @Test

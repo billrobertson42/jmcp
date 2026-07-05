@@ -30,6 +30,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExplainQueryToolTest {
@@ -81,10 +82,14 @@ class ExplainQueryToolTest {
     void testGetInputSchema() {
         JsonNode schema = explainQueryTool.getInputSchema();
         assertNotNull(schema);
-        assertTrue(schema.get("properties").has("sql"));
-        JsonNode required = schema.get("required");
-        assertTrue(required.isArray());
-        assertEquals("sql", required.get(0).asText(), "'sql' must be the required field");
+
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("properties.sql").isPresent(),
+            j -> j.node("required").isArray(),
+            j -> j.node("required[0]")
+                .describedAs("'sql' must be the required field")
+                .isEqualTo("sql")
+        );
     }
 
     @Test

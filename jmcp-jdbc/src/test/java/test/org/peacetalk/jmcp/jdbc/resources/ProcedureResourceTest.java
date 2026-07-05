@@ -23,14 +23,13 @@ import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.resources.ProcedureResource;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -50,7 +49,6 @@ class ProcedureResourceTest {
 
     private Connection connection;
     private ConnectionManager mockConnectionManager;
-    private ObjectMapper mapper;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -75,8 +73,6 @@ class ProcedureResourceTest {
         when(mockConnectionManager.listConnections()).thenReturn(List.of(
             new ConnectionInfo("testdb", "jdbc:h2:mem:proceduretest", "sa", "h2")
         ));
-
-        mapper = new ObjectMapper();
     }
 
     @AfterEach
@@ -104,11 +100,11 @@ class ProcedureResourceTest {
     void testReadReportsIdentityFields() throws Exception {
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        assertEquals("CALCULATE_TAX", json.get("name").asString());
-        assertEquals("TEST_SCHEMA", json.get("schema").asString());
-        assertEquals("testdb", json.get("connectionId").asString());
+        assertThatJson(resource.read()).and(
+            j -> j.node("name").isEqualTo("CALCULATE_TAX"),
+            j -> j.node("schema").isEqualTo("TEST_SCHEMA"),
+            j -> j.node("connectionId").isEqualTo("testdb")
+        );
     }
 
     @Test
@@ -117,32 +113,26 @@ class ProcedureResourceTest {
         // which ProcedureResource maps to "FUNCTION". Guards the PROCEDURE_TYPE switch.
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        assertEquals("FUNCTION", json.get("type").asString(),
-            "A value-returning alias should be classified as FUNCTION, not PROCEDURE/UNKNOWN");
+        assertThatJson(resource.read())
+            .node("type")
+            .describedAs("A value-returning alias should be classified as FUNCTION, not PROCEDURE/UNKNOWN")
+            .isEqualTo("FUNCTION");
     }
 
     @Test
     void testReadExposesParametersWithModes() throws Exception {
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        JsonNode params = json.get("parameters");
-        assertNotNull(params, "parameters field should be present for a function with columns");
-        assertTrue(params.isArray());
-        assertFalse(params.isEmpty(), "calculateTax(amount, rate) should expose parameter metadata");
-
         // Every parameter should carry a resolved (non-UNKNOWN) mode and an ordinal position.
-        for (JsonNode param : params) {
-            assertTrue(param.has("name"));
-            assertTrue(param.has("mode"));
-            assertTrue(param.has("position"));
-            String mode = param.get("mode").asString();
-            assertTrue(List.of("IN", "OUT", "INOUT", "RETURN", "RESULT").contains(mode),
-                "Parameter mode should be one of the known JDBC modes, was: " + mode);
-        }
+        assertThatJson(resource.read())
+            .node("parameters").isArray()
+            .describedAs("calculateTax(amount, rate) should expose parameter metadata")
+            .isNotEmpty()
+            .allSatisfy(param -> assertThatJson(param).and(
+                p -> p.node("name").isPresent(),
+                p -> p.node("position").isPresent(),
+                p -> p.node("mode").isString().isIn("IN", "OUT", "INOUT", "RETURN", "RESULT")
+            ));
     }
 
     @Test
@@ -152,23 +142,21 @@ class ProcedureResourceTest {
         // so the fields must be null -- not the empty string and not a fabricated value.
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        assertTrue(json.get("definition").isNull(), "definition should be null on H2");
-        assertTrue(json.get("language").isNull(), "language should be null on H2");
-        assertTrue(json.get("isDeterministic").isNull(), "isDeterministic should be null on H2");
+        assertThatJson(resource.read()).and(
+            j -> j.node("definition").describedAs("definition should be null on H2").isNull(),
+            j -> j.node("language").describedAs("language should be null on H2").isNull(),
+            j -> j.node("isDeterministic").describedAs("isDeterministic should be null on H2").isNull()
+        );
     }
 
     @Test
     void testReadLinksParentToSchema() throws Exception {
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "CALCULATE_TAX", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        JsonNode links = json.get("links");
-        assertNotNull(links);
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString(),
-            "Parent link should point at the owning schema resource");
+        assertThatJson(resource.read())
+            .node("links.parent")
+            .describedAs("Parent link should point at the owning schema resource")
+            .isEqualTo("db://connection/testdb/schema/TEST_SCHEMA");
     }
 
     @Test
@@ -177,10 +165,10 @@ class ProcedureResourceTest {
         // parameters collapse to null (empty list is normalized to null in the response).
         ProcedureResource resource = new ProcedureResource("testdb", "TEST_SCHEMA", "DOES_NOT_EXIST", mockConnectionManager);
 
-        JsonNode json = mapper.readTree(resource.read());
-
-        assertEquals("DOES_NOT_EXIST", json.get("name").asString());
-        assertTrue(json.get("type").isNull(), "type should be null when no procedure matches");
-        assertTrue(json.get("parameters").isNull(), "parameters should be null when no procedure matches");
+        assertThatJson(resource.read()).and(
+            j -> j.node("name").isEqualTo("DOES_NOT_EXIST"),
+            j -> j.node("type").describedAs("type should be null when no procedure matches").isNull(),
+            j -> j.node("parameters").describedAs("parameters should be null when no procedure matches").isNull()
+        );
     }
 }

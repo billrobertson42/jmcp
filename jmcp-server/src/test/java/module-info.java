@@ -21,5 +21,7 @@ open module org.peacetalk.jmcp.server.test {
     requires org.junit.jupiter.api;
     requires org.mockito;
     requires tools.jackson.databind;
+    requires net.javacrumbs.jsonunit.assertj;
+    requires org.assertj.core;
 }
 

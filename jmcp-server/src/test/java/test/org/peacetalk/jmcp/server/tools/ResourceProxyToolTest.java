@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -97,23 +98,28 @@ public class ResourceProxyToolTest {
         JsonNode schema = tool.getInputSchema();
         assertNotNull(schema);
 
-        assertEquals("object", schema.get("type").asString(),
-            "input schema should be an object schema");
-
-        // Both properties are advertised.
-        assertTrue(schema.has("properties"));
-        JsonNode properties = schema.get("properties");
-        assertTrue(properties.has("operation"), "operation property should be declared");
-        assertTrue(properties.has("uri"), "uri property should be declared");
-
-        // Only 'operation' is required; 'uri' is conditionally required (read only)
-        // and must NOT be advertised as globally required.
-        assertTrue(schema.has("required"));
-        JsonNode required = schema.get("required");
-        assertTrue(required.isArray());
-        assertEquals(1, required.size(), "exactly one field should be globally required");
-        assertEquals("operation", required.get(0).asString(),
-            "operation should be the only required field");
+        // Node-path style, not whole-document: the operation/uri property sub-schemas
+        // have their own descriptions that aren't the point of this test, so pinning
+        // the whole document would make it brittle to unrelated description wording.
+        assertThatJson(MAPPER.writeValueAsString(schema)).and(
+            j -> j.node("type")
+                .describedAs("input schema should be an object schema")
+                .isEqualTo("object"),
+            j -> j.node("properties.operation")
+                .describedAs("operation property should be declared")
+                .isPresent(),
+            j -> j.node("properties.uri")
+                .describedAs("uri property should be declared")
+                .isPresent(),
+            // Only 'operation' is required; 'uri' is conditionally required (read only)
+            // and must NOT be advertised as globally required.
+            j -> j.node("required").isArray()
+                .describedAs("exactly one field should be globally required")
+                .hasSize(1),
+            j -> j.node("required[0]")
+                .describedAs("operation should be the only required field")
+                .isEqualTo("operation")
+        );
     }
 
     @Test

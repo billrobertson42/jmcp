@@ -30,6 +30,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SampleDataToolTest {
@@ -99,21 +100,19 @@ class SampleDataToolTest {
     void testGetInputSchema() {
         JsonNode schema = tool.getInputSchema();
         assertNotNull(schema);
-        assertTrue(schema.isObject());
-        assertTrue(schema.has("properties"));
 
-        JsonNode props = schema.get("properties");
-        // The parameters an LLM needs must actually be declared.
-        assertTrue(props.has("table"), "table is the only required input");
-        assertTrue(props.has("sample_size"));
-        assertTrue(props.has("strategy"));
-        assertEquals("table", schema.get("required").get(0).asString());
-
-        // sample_size must advertise its clamp bounds (1..100) in the schema so
-        // clients can validate without parsing the English description.
-        JsonNode sampleSize = props.get("sample_size");
-        assertEquals(1, sampleSize.get("minimum").asInt());
-        assertEquals(100, sampleSize.get("maximum").asInt());
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("type").isEqualTo("object"),
+            // The parameters an LLM needs must actually be declared.
+            j -> j.node("properties.table").describedAs("table is the only required input").isPresent(),
+            j -> j.node("properties.sample_size").isPresent(),
+            j -> j.node("properties.strategy").isPresent(),
+            j -> j.node("required[0]").isEqualTo("table"),
+            // sample_size must advertise its clamp bounds (1..100) in the schema so
+            // clients can validate without parsing the English description.
+            j -> j.node("properties.sample_size.minimum").isEqualTo(1),
+            j -> j.node("properties.sample_size.maximum").isEqualTo(100)
+        );
     }
 
     @Test
