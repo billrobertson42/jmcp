@@ -30,6 +30,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ExplainQueryToolTest {
@@ -72,18 +73,23 @@ class ExplainQueryToolTest {
     void testGetDescription() {
         String description = explainQueryTool.getDescription();
         assertNotNull(description);
-        assertTrue(description.toLowerCase().contains("explain") ||
-                   description.toLowerCase().contains("execution") ||
-                   description.toLowerCase().contains("plan"));
+        String lower = description.toLowerCase();
+        assertTrue(lower.contains("execution plan") || lower.contains("plan"),
+            "description should mention the execution plan, was: " + description);
     }
 
     @Test
     void testGetInputSchema() {
         JsonNode schema = explainQueryTool.getInputSchema();
         assertNotNull(schema);
-        assertTrue(schema.has("properties"));
-        assertTrue(schema.get("properties").has("sql"));
-        assertTrue(schema.has("required"));
+
+        assertThatJson(mapper.writeValueAsString(schema)).and(
+            j -> j.node("properties.sql").isPresent(),
+            j -> j.node("required").isArray(),
+            j -> j.node("required[0]")
+                .describedAs("'sql' must be the required field")
+                .isEqualTo("sql")
+        );
     }
 
     @Test
@@ -95,44 +101,41 @@ class ExplainQueryToolTest {
 
         Object result = explainQueryTool.execute(params, context);
         assertNotNull(result);
-        assertTrue(result instanceof ExplainQueryResult);
+        assertInstanceOf(ExplainQueryResult.class, result);
 
         ExplainQueryResult explainResult = (ExplainQueryResult) result;
+        // The echoed sql must be the (trimmed) original query, not the wrapped EXPLAIN.
         assertEquals("SELECT * FROM users", explainResult.sql());
         assertNotNull(explainResult.plan());
-        assertFalse(explainResult.plan().isEmpty());
-        assertNotNull(explainResult.format());
+        assertFalse(explainResult.plan().isEmpty(), "H2 EXPLAIN produces a non-empty plan");
+        // H2 plans reference the scanned table.
+        assertTrue(explainResult.plan().toUpperCase().contains("USERS"),
+            "plan should reference the USERS table, was: " + explainResult.plan());
     }
 
     @Test
-    void testExplainQueryWithWhere() throws Exception {
+    void testSqlIsTrimmedInResult() throws Exception {
         ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
-        params.put("sql", "SELECT * FROM users WHERE age > 30");
+        params.put("sql", "   SELECT * FROM users   ");
 
-        Object result = explainQueryTool.execute(params, context);
-        assertTrue(result instanceof ExplainQueryResult);
-
-        ExplainQueryResult explainResult = (ExplainQueryResult) result;
-        assertNotNull(explainResult.plan());
-        assertFalse(explainResult.plan().isEmpty());
+        ExplainQueryResult explainResult = (ExplainQueryResult) explainQueryTool.execute(params, context);
+        assertEquals("SELECT * FROM users", explainResult.sql(),
+            "leading/trailing whitespace should be trimmed before echoing sql");
     }
 
     @Test
-    void testExplainQueryWithIndex() throws Exception {
+    void testExplainQueryWithIndexUsesIndex() throws Exception {
         ConnectionSupplier context = () -> connection;
 
+        // age has idx_users_age; H2's plan text names the index it chooses.
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users WHERE age = 25");
 
-        Object result = explainQueryTool.execute(params, context);
-        assertTrue(result instanceof ExplainQueryResult);
-
-        ExplainQueryResult explainResult = (ExplainQueryResult) result;
-        assertNotNull(explainResult.plan());
-        // Plan should mention the index (database-specific)
-        assertTrue(explainResult.plan().length() > 0);
+        ExplainQueryResult explainResult = (ExplainQueryResult) explainQueryTool.execute(params, context);
+        assertTrue(explainResult.plan().toUpperCase().contains("IDX_USERS_AGE"),
+            "H2 plan for an indexed predicate should name idx_users_age, was: " + explainResult.plan());
     }
 
     @Test
@@ -148,56 +151,37 @@ class ExplainQueryToolTest {
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT u.name, o.amount FROM users u JOIN orders o ON u.id = o.user_id");
 
-        Object result = explainQueryTool.execute(params, context);
-        assertTrue(result instanceof ExplainQueryResult);
-
-        ExplainQueryResult explainResult = (ExplainQueryResult) result;
-        assertNotNull(explainResult.plan());
-        // Plan should show join operation
-        assertTrue(explainResult.plan().length() > 0);
+        ExplainQueryResult explainResult = (ExplainQueryResult) explainQueryTool.execute(params, context);
+        // Both joined tables should appear in the plan.
+        String planUpper = explainResult.plan().toUpperCase();
+        assertTrue(planUpper.contains("USERS") && planUpper.contains("ORDERS"),
+            "join plan should reference both USERS and ORDERS, was: " + explainResult.plan());
     }
 
     @Test
-    void testExplainAggregateQuery() throws Exception {
-        ConnectionSupplier context = () -> connection;
-
-        ObjectNode params = mapper.createObjectNode();
-        params.put("sql", "SELECT age, COUNT(*) FROM users GROUP BY age");
-
-        Object result = explainQueryTool.execute(params, context);
-        assertTrue(result instanceof ExplainQueryResult);
-
-        ExplainQueryResult explainResult = (ExplainQueryResult) result;
-        assertNotNull(explainResult.plan());
-        assertTrue(explainResult.plan().length() > 0);
-    }
-
-    @Test
-    void testFormatTypeIsSet() throws Exception {
+    void testFormatTypeIsH2() throws Exception {
         ConnectionSupplier context = () -> connection;
 
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM users");
 
-        Object result = explainQueryTool.execute(params, context);
-        ExplainQueryResult explainResult = (ExplainQueryResult) result;
-
-        assertNotNull(explainResult.format());
-        // H2 database should return "H2" format
-        assertTrue(explainResult.format().contains("H2") ||
-                   explainResult.format().equals("UNKNOWN"));
+        ExplainQueryResult explainResult = (ExplainQueryResult) explainQueryTool.execute(params, context);
+        // The connection is H2, so getFormatType must resolve to exactly "H2" (not UNKNOWN).
+        assertEquals("H2", explainResult.format(),
+            "format should be resolved from the H2 product name");
     }
 
     @Test
     void testInvalidQueryThrowsException() {
         ConnectionSupplier context = () -> connection;
 
+        // Query passes read-only validation but references a missing table,
+        // so EXPLAIN fails at the database with a SQLException.
         ObjectNode params = mapper.createObjectNode();
         params.put("sql", "SELECT * FROM nonexistent_table");
 
-        assertThrows(Exception.class, () -> {
-            explainQueryTool.execute(params, context);
-        });
+        assertThrows(java.sql.SQLException.class,
+            () -> explainQueryTool.execute(params, context));
     }
 
     @Test

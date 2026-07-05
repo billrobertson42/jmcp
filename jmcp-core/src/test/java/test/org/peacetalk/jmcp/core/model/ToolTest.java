@@ -20,9 +20,13 @@ import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.Tool;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
+// NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
+// field rename could silently break it), NOT Jackson's ability to serialize.
 class ToolTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -71,20 +75,68 @@ class ToolTest {
     }
 
     @Test
-    void testToolSerialization() throws Exception {
-        JsonNode schema = mapper.createObjectNode()
-            .put("type", "object");
+    void testSerializesExactShape() {
+        // Pins the MCP wire contract's key names (Tool's class Javadoc documents the
+        // TypeScript interface these must match) — NOT nested-schema fidelity, which
+        // is just JsonNode's own pass-through serialization and is covered more
+        // rigorously by testRoundTripPreservesSchema's deep-equality check below.
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        schema.putObject("properties").putObject("x").put("type", "string");
 
         Tool tool = new Tool("test-tool", "A test tool", schema);
 
-        String json = mapper.writeValueAsString(tool);
-        assertNotNull(json);
-        assertTrue(json.contains("test-tool"));
-        assertTrue(json.contains("A test tool"));
+        // Node-path style (not whole-document): inputSchema's own nested content is
+        // deliberately NOT pinned here (see testRoundTripPreservesSchema for that) —
+        // asserting the whole document would needlessly couple this wire-contract
+        // test to the nested schema's internal shape.
+        assertThatJson(mapper.writeValueAsString(tool)).and(
+            j -> j.node("name").isEqualTo("test-tool"),
+            j -> j.node("description").isEqualTo("A test tool"),
+            j -> j.node("inputSchema").isPresent(),
+            j -> j.isObject().hasSize(3)
+        );
+    }
 
+    @Test
+    void testOmitsNullDescription() {
+        // description is @JsonInclude(NON_NULL) at the type level; a null description
+        // must be omitted rather than written as null.
+        JsonNode schema = mapper.createObjectNode().put("type", "object");
+        Tool tool = new Tool("test-tool", null, schema);
+
+        assertThatJson(mapper.writeValueAsString(tool))
+            .isEqualTo("""
+                    {"name":"test-tool","inputSchema":{"type":"object"}}""");
+    }
+
+    @Test
+    void testRoundTripPreservesSchema() throws Exception {
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        schema.putArray("required").add("x");
+
+        Tool original = new Tool("test-tool", "A test tool", schema);
+
+        String json = mapper.writeValueAsString(original);
         Tool deserialized = mapper.readValue(json, Tool.class);
-        assertEquals(tool.name(), deserialized.name());
-        assertEquals(tool.description(), deserialized.description());
+
+        assertEquals(original.name(), deserialized.name());
+        assertEquals(original.description(), deserialized.description());
+        assertEquals(original.inputSchema(), deserialized.inputSchema(),
+            "inputSchema JsonNode must round-trip to an equal tree");
+    }
+
+    @Test
+    void testRoundTripWithoutDescription() throws Exception {
+        JsonNode schema = mapper.createObjectNode().put("type", "object");
+        Tool original = new Tool("test-tool", null, schema);
+
+        String json = mapper.writeValueAsString(original);
+        Tool deserialized = mapper.readValue(json, Tool.class);
+
+        assertEquals(original.name(), deserialized.name());
+        assertNull(deserialized.description(), "absent description must deserialize back to null");
+        assertEquals(original.inputSchema(), deserialized.inputSchema());
     }
 }
-

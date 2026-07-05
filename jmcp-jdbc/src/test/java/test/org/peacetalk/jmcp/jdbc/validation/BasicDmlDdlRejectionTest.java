@@ -52,33 +52,43 @@ class BasicDmlDdlRejectionTest {
 
     @Test
     void testRejectDrop() {
-        assertThrows(IllegalArgumentException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             ReadOnlySqlValidator.validateReadOnly("DROP TABLE users"));
+        assertTrue(ex.getMessage().contains("Drop"),
+            "Rejection should identify the statement as a Drop: " + ex.getMessage());
     }
 
     @Test
     void testRejectCreate() {
-        assertThrows(IllegalArgumentException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             ReadOnlySqlValidator.validateReadOnly("CREATE TABLE test (id INT)"));
+        assertTrue(ex.getMessage().contains("CreateTable"),
+            "Rejection should identify the statement as a CreateTable: " + ex.getMessage());
     }
 
     @Test
     void testRejectAlter() {
-        assertThrows(IllegalArgumentException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             ReadOnlySqlValidator.validateReadOnly("ALTER TABLE users ADD COLUMN email VARCHAR(255)"));
+        assertTrue(ex.getMessage().contains("Alter"),
+            "Rejection should identify the statement as an Alter: " + ex.getMessage());
     }
 
     @Test
     void testRejectTruncate() {
-        assertThrows(IllegalArgumentException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             ReadOnlySqlValidator.validateReadOnly("TRUNCATE TABLE users"));
+        assertTrue(ex.getMessage().contains("read-only"),
+            "Rejection should mention read-only: " + ex.getMessage());
     }
 
     @Test
     void testRejectMerge() {
         String sql = "MERGE INTO users USING updates ON users.id = updates.id WHEN MATCHED THEN UPDATE SET name = updates.name";
-        assertThrows(IllegalArgumentException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             ReadOnlySqlValidator.validateReadOnly(sql));
+        assertTrue(ex.getMessage().contains("read-only"),
+            "Rejection should mention read-only: " + ex.getMessage());
     }
 
     // ========== Multiple Statements ==========

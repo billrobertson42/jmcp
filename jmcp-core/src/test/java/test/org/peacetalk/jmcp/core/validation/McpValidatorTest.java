@@ -159,9 +159,16 @@ class McpValidatorTest {
         Tool validTool = new Tool("test", "desc", mapper.createObjectNode());
         assertDoesNotThrow(() -> McpValidator.validateAndThrow(validTool));
 
-        // Invalid Tool (blank name) will fail in compact constructor
-        assertThrows(IllegalArgumentException.class, () ->
-            new Tool("", "desc", mapper.createObjectNode()));
+        // A JsonRpcRequest with version "1.0" passes the compact constructor but
+        // fails JSR-380 validation, so it exercises validateAndThrow's throwing
+        // path (which the previous version of this test never reached — it only
+        // re-checked the Tool constructor).
+        JsonRpcRequest invalidVersion = new JsonRpcRequest("1.0", 1, "test/method", null);
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> McpValidator.validateAndThrow(invalidVersion),
+            "validateAndThrow must throw when JSR-380 constraints are violated");
+        assertTrue(ex.getMessage() != null && ex.getMessage().contains("jsonrpc"),
+            "thrown message should identify the violated field, but was: " + ex.getMessage());
     }
 
     @Test

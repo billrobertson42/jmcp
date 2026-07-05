@@ -23,8 +23,11 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
+// NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
+// field rename could silently break it), NOT Jackson's ability to serialize.
 class CallToolResultTest {
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -73,16 +76,57 @@ class CallToolResultTest {
     }
 
     @Test
-    void testSerialization() throws Exception {
+    void testSuccessResultSerializesExactShapeAndOmitsIsError() {
+        // A successful result has isError == null, which must be omitted (NON_NULL).
+        // Whole-shape comparison also confirms no other field (like isError) leaks in.
         CallToolResult result = CallToolResult.text("Test data");
 
-        String json = mapper.writeValueAsString(result);
-        assertNotNull(json);
-        assertTrue(json.contains("Test data"));
-        assertTrue(json.contains("content"));
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[{"type":"text","text":"Test data"}]}""");
+    }
 
+    @Test
+    void testErrorResultSerializesIsErrorTrue() {
+        // An error result must serialize isError=true (a JSON boolean, not the string
+        // "true") under the exact JSON key "isError".
+        CallToolResult result = CallToolResult.error("boom");
+
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[{"type":"text","text":"boom"}],"isError":true}""");
+    }
+
+    @Test
+    void testEmptyContentSerializesAsEmptyArrayNotNull() {
+        // content is coerced to List.of() by the compact constructor, so it must
+        // serialize as [] rather than being omitted or written as null.
+        CallToolResult result = new CallToolResult(null, null);
+
+        assertThatJson(mapper.writeValueAsString(result))
+            .isEqualTo("""
+                    {"content":[]}""");
+    }
+
+    @Test
+    void testSuccessResultRoundTrip() throws Exception {
+        CallToolResult original = CallToolResult.text("Test data");
+
+        String json = mapper.writeValueAsString(original);
         CallToolResult deserialized = mapper.readValue(json, CallToolResult.class);
-        assertEquals(result.content().size(), deserialized.content().size());
+
+        assertEquals(original, deserialized, "successful result must survive a JSON round-trip unchanged");
+        assertNull(deserialized.isError(), "absent isError must deserialize back to null");
+    }
+
+    @Test
+    void testErrorResultRoundTrip() throws Exception {
+        CallToolResult original = CallToolResult.error("Error message");
+
+        String json = mapper.writeValueAsString(original);
+        CallToolResult deserialized = mapper.readValue(json, CallToolResult.class);
+
+        assertEquals(original, deserialized, "error result must survive a JSON round-trip unchanged");
+        assertTrue(deserialized.isError(), "isError=true must survive the round-trip");
     }
 }
-

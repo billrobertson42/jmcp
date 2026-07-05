@@ -32,6 +32,7 @@ import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -114,14 +115,12 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("connections"));
-
-        JsonNode firstConnection = json.get("connections").get(0);
-        assertEquals("testdb", firstConnection.get("id").asString());
-        assertEquals("h2", firstConnection.get("databaseType").asString());
-        assertTrue(firstConnection.has("resourceUri"));
-        assertTrue(firstConnection.has("schemasUri"));
+        assertThatJson(result).and(
+            j -> j.node("connections[0].id").isEqualTo("testdb"),
+            j -> j.node("connections[0].databaseType").isEqualTo("h2"),
+            j -> j.node("connections[0].resourceUri").isPresent(),
+            j -> j.node("connections[0].schemasUri").isPresent()
+        );
     }
 
     // ConnectionResource tests
@@ -143,14 +142,12 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertEquals("testdb", json.get("id").asString());
-        assertTrue(json.has("database"));
-        assertTrue(json.has("links"));
-
-        JsonNode database = json.get("database");
-        assertNotNull(database.get("productName"));
-        assertNotNull(database.get("productVersion"));
+        assertThatJson(result).and(
+            j -> j.node("id").isEqualTo("testdb"),
+            j -> j.node("links").isPresent(),
+            j -> j.node("database.productName").isPresent(),
+            j -> j.node("database.productVersion").isPresent()
+        );
     }
 
     // SchemasListResource tests
@@ -176,7 +173,36 @@ class JdbcResourcesTest {
         assertTrue(json.has("schemas"));
         assertTrue(json.has("links"));
         assertTrue(json.get("schemas").isArray());
-        assertTrue(json.get("schemas").size() > 0);
+
+        // With all schemas visible, TEST_SCHEMA should be listed with its navigation URIs.
+        JsonNode testSchema = findSchemaEntry(json.get("schemas"), "TEST_SCHEMA");
+        assertNotNull(testSchema, "TEST_SCHEMA should appear in the schema listing");
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA",
+            testSchema.get("resourceUri").asString());
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/tables",
+            testSchema.get("tablesUri").asString());
+
+        // Parent link points back at the connection.
+        assertEquals("db://connection/testdb", json.get("links").get("parent").asString());
+    }
+
+    @Test
+    void testSchemasListResourceExcludesFilteredSchema() throws Exception {
+        // Reconfigure the shared mock context so TEST_SCHEMA is hidden by the schema filter.
+        ConnectionContext filteredContext = mock(ConnectionContext.class);
+        when(filteredContext.getConnection()).thenReturn(connection);
+        when(filteredContext.isSchemaVisible(anyString())).thenReturn(true);
+        when(filteredContext.isSchemaVisible("TEST_SCHEMA")).thenReturn(false);
+        when(mockConnectionManager.getContext("testdb")).thenReturn(filteredContext);
+
+        SchemasListResource resource = new SchemasListResource("testdb", mockConnectionManager);
+        JsonNode json = mapper.readTree(resource.read());
+
+        assertNull(findSchemaEntry(json.get("schemas"), "TEST_SCHEMA"),
+            "A schema hidden by isSchemaVisible must be absent from the listing");
+        // Other schemas remain visible, so exclusion is targeted rather than emptying the list.
+        assertNotNull(findSchemaEntry(json.get("schemas"), "PUBLIC"),
+            "Schemas still allowed by the filter should remain visible");
     }
 
     // SchemaResource tests
@@ -198,35 +224,27 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertEquals("TEST_SCHEMA", json.get("name").asString());
-        assertTrue(json.has("tables"));
-        assertTrue(json.has("views"));
-        assertTrue(json.has("procedures"));
-        assertTrue(json.has("links"));
+        // We created 2 tables (users, orders) and 1 view.
+        assertThatJson(result).and(
+            j -> j.node("name").isEqualTo("TEST_SCHEMA"),
+            j -> j.node("links").isPresent(),
+            j -> j.node("tables").isArray().hasSize(2),
+            j -> j.node("tables[0].name").isPresent(),
+            j -> j.node("tables[0].uri").isPresent(),
+            j -> j.node("views").isArray().hasSize(1),
+            j -> j.node("views[0].name").isPresent(),
+            j -> j.node("views[0].uri").isPresent(),
+            j -> j.node("procedures").isArray()
+        );
 
-        // We created 2 tables (users, orders) and 1 view
-        JsonNode tables = json.get("tables");
-        assertEquals(2, tables.size());
-        // Check that tables have name and uri fields
-        assertTrue(tables.get(0).has("name"));
-        assertTrue(tables.get(0).has("uri"));
-
-        JsonNode views = json.get("views");
-        assertEquals(1, views.size());
-        // Check that views have name and uri fields
-        assertTrue(views.get(0).has("name"));
-        assertTrue(views.get(0).has("uri"));
-
-        // Check procedures
-        JsonNode procedures = json.get("procedures");
-        assertNotNull(procedures);
-        // H2 may or may not have procedures
-        assertTrue(procedures.isArray());
+        // H2 may or may not report procedures; when present, verify their shape.
+        JsonNode procedures = mapper.readTree(result).get("procedures");
         if (procedures.size() > 0) {
-            assertTrue(procedures.get(0).has("name"));
-            assertTrue(procedures.get(0).has("type"));
-            assertTrue(procedures.get(0).has("uri"));
+            assertThatJson(mapper.writeValueAsString(procedures.get(0))).and(
+                j -> j.node("name").isPresent(),
+                j -> j.node("type").isPresent(),
+                j -> j.node("uri").isPresent()
+            );
         }
     }
 
@@ -249,22 +267,16 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertEquals("USERS", json.get("name").asString());
-        assertTrue(json.has("columns"));
-        assertTrue(json.has("primaryKey"));
-        assertTrue(json.has("indexes"));
-        assertTrue(json.has("foreignKeys"));
-        assertTrue(json.has("links"));
-
-        // Check columns
-        JsonNode columns = json.get("columns");
-        assertEquals(2, columns.size()); // id and name columns
-
-        // Verify parent link points to schema (not deleted tables list)
-        JsonNode links = json.get("links");
-        assertTrue(links.has("parent"));
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
+        assertThatJson(result).and(
+            j -> j.node("name").isEqualTo("USERS"),
+            j -> j.node("primaryKey").isPresent(),
+            j -> j.node("indexes").isPresent(),
+            j -> j.node("foreignKeys").isPresent(),
+            // id and name columns.
+            j -> j.node("columns").isArray().hasSize(2),
+            // Verify parent link points to schema (not deleted tables list).
+            j -> j.node("links.parent").isEqualTo("db://connection/testdb/schema/TEST_SCHEMA")
+        );
     }
 
     @Test
@@ -274,18 +286,14 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("foreignKeys"));
-
-        JsonNode foreignKeys = json.get("foreignKeys");
-        assertFalse(foreignKeys.isEmpty());
-
-        JsonNode fk = foreignKeys.get(0);
-        assertEquals("USERS", fk.get("referencedTable").asString());
-        assertTrue(fk.has("referencedTableUri"));
-        // Check that referential action fields are present (may be null)
-        assertTrue(fk.has("onDelete"));
-        assertTrue(fk.has("onUpdate"));
+        assertThatJson(result).and(
+            j -> j.node("foreignKeys").isArray().isNotEmpty(),
+            j -> j.node("foreignKeys[0].referencedTable").isEqualTo("USERS"),
+            j -> j.node("foreignKeys[0].referencedTableUri").isPresent(),
+            // Referential action fields must be present (their value may be null).
+            j -> j.node("foreignKeys[0].onDelete").isPresent(),
+            j -> j.node("foreignKeys[0].onUpdate").isPresent()
+        );
     }
 
     @Test
@@ -296,19 +304,15 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("reverseForeignKeys"));
-
-        JsonNode reverseFks = json.get("reverseForeignKeys");
-        assertFalse(reverseFks.isEmpty());
-
-        // Orders table references Users, so Users should have a reverse FK
-        JsonNode reverseFk = reverseFks.get(0);
-        assertEquals("ORDERS", reverseFk.get("referencingTable").asString());
-        assertTrue(reverseFk.has("referencingTableUri"));
-        // Check that referential action fields are present (may be null)
-        assertTrue(reverseFk.has("onDelete"));
-        assertTrue(reverseFk.has("onUpdate"));
+        // Orders table references Users, so Users should have a reverse FK.
+        assertThatJson(result).and(
+            j -> j.node("reverseForeignKeys").isArray().isNotEmpty(),
+            j -> j.node("reverseForeignKeys[0].referencingTable").isEqualTo("ORDERS"),
+            j -> j.node("reverseForeignKeys[0].referencingTableUri").isPresent(),
+            // Referential action fields must be present (their value may be null).
+            j -> j.node("reverseForeignKeys[0].onDelete").isPresent(),
+            j -> j.node("reverseForeignKeys[0].onUpdate").isPresent()
+        );
     }
 
     // RelationshipsResource tests
@@ -330,28 +334,21 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("connectionId"));
-        assertEquals("testdb", json.get("connectionId").asString());
-        assertTrue(json.has("relationships"));
-        assertTrue(json.has("links"));
-
-        JsonNode relationships = json.get("relationships");
-        assertFalse(relationships.isEmpty());
-
-        // Should have at least the orders -> users FK
-        boolean foundOrdersUsersFK = false;
-        for (int i = 0; i < relationships.size(); i++) {
-            JsonNode rel = relationships.get(i);
-            if ("ORDERS".equals(rel.get("fromTable").asString()) &&
-                "USERS".equals(rel.get("toTable").asString())) {
-                foundOrdersUsersFK = true;
-                assertTrue(rel.has("columns"));
-                assertTrue(rel.has("fromTableUri"));
-                assertTrue(rel.has("toTableUri"));
-            }
-        }
-        assertTrue(foundOrdersUsersFK, "Should find ORDERS -> USERS relationship");
+        // Should have at least the orders -> users FK.
+        assertThatJson(result).and(
+            j -> j.node("connectionId").isEqualTo("testdb"),
+            j -> j.node("links").isPresent(),
+            j -> j.node("relationships").isArray()
+                .isNotEmpty()
+                .describedAs("Should find ORDERS -> USERS relationship")
+                .anySatisfy(rel -> assertThatJson(rel).and(
+                    r -> r.node("fromTable").isEqualTo("ORDERS"),
+                    r -> r.node("toTable").isEqualTo("USERS"),
+                    r -> r.node("columns").isPresent(),
+                    r -> r.node("fromTableUri").isPresent(),
+                    r -> r.node("toTableUri").isPresent()
+                ))
+        );
     }
 
     // SchemaRelationshipsResource tests
@@ -373,32 +370,24 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertTrue(json.has("connectionId"));
-        assertEquals("testdb", json.get("connectionId").asString());
-        assertTrue(json.has("schema"));
-        assertEquals("TEST_SCHEMA", json.get("schema").asString());
-        assertTrue(json.has("relationships"));
-        assertTrue(json.has("links"));
-
-        JsonNode relationships = json.get("relationships");
-        assertFalse(relationships.isEmpty());
-
-        // Should have the orders -> users FK (both in TEST_SCHEMA)
-        boolean foundOrdersUsersFK = false;
-        for (int i = 0; i < relationships.size(); i++) {
-            JsonNode rel = relationships.get(i);
-            if ("ORDERS".equals(rel.get("fromTable").asString()) &&
-                "USERS".equals(rel.get("toTable").asString())) {
-                foundOrdersUsersFK = true;
-                assertEquals("TEST_SCHEMA", rel.get("fromSchema").asString());
-                assertEquals("TEST_SCHEMA", rel.get("toSchema").asString());
-                assertTrue(rel.has("columns"));
-                assertTrue(rel.has("fromTableUri"));
-                assertTrue(rel.has("toTableUri"));
-            }
-        }
-        assertTrue(foundOrdersUsersFK, "Should find ORDERS -> USERS relationship in TEST_SCHEMA");
+        // Should have the orders -> users FK (both in TEST_SCHEMA).
+        assertThatJson(result).and(
+            j -> j.node("connectionId").isEqualTo("testdb"),
+            j -> j.node("schema").isEqualTo("TEST_SCHEMA"),
+            j -> j.node("links").isPresent(),
+            j -> j.node("relationships").isArray()
+                .isNotEmpty()
+                .describedAs("Should find ORDERS -> USERS relationship in TEST_SCHEMA")
+                .anySatisfy(rel -> assertThatJson(rel).and(
+                    r -> r.node("fromTable").isEqualTo("ORDERS"),
+                    r -> r.node("toTable").isEqualTo("USERS"),
+                    r -> r.node("fromSchema").isEqualTo("TEST_SCHEMA"),
+                    r -> r.node("toSchema").isEqualTo("TEST_SCHEMA"),
+                    r -> r.node("columns").isPresent(),
+                    r -> r.node("fromTableUri").isPresent(),
+                    r -> r.node("toTableUri").isPresent()
+                ))
+        );
     }
 
 
@@ -421,25 +410,16 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertEquals("USER_ORDERS", json.get("name").asString());
-        assertTrue(json.has("columns"));
-        assertTrue(json.has("viewDefinition"));
-        assertTrue(json.has("links"));
-
-        // View definition should be present (may be null if DB doesn't support it)
-        // For H2, it should retrieve the definition
-        JsonNode viewDef = json.get("viewDefinition");
-        assertNotNull(viewDef); // Field should exist even if null
-
-        // Check columns (name and total from the view)
-        JsonNode columns = json.get("columns");
-        assertEquals(2, columns.size());
-
-        // Verify parent link points to schema (not deleted views list)
-        JsonNode links = json.get("links");
-        assertTrue(links.has("parent"));
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
+        // viewDefinition field should exist even if null (may be null if the DB doesn't
+        // support retrieving it; for H2 it should retrieve the actual definition).
+        // Columns: name and total from the view.
+        assertThatJson(result).and(
+            j -> j.node("name").isEqualTo("USER_ORDERS"),
+            j -> j.node("viewDefinition").isPresent(),
+            j -> j.node("columns").isArray().hasSize(2),
+            // Verify parent link points to schema (not deleted views list).
+            j -> j.node("links.parent").isEqualTo("db://connection/testdb/schema/TEST_SCHEMA")
+        );
     }
 
     // ProcedureResource tests
@@ -461,16 +441,27 @@ class JdbcResourcesTest {
         String result = resource.read();
         assertNotNull(result);
 
-        JsonNode json = mapper.readTree(result);
-        assertEquals("CALCULATE_TAX", json.get("name").asString());
-        assertEquals("TEST_SCHEMA", json.get("schema").asString());
-        assertTrue(json.has("type"));
-        assertTrue(json.has("links"));
+        assertThatJson(result).and(
+            j -> j.node("name").isEqualTo("CALCULATE_TAX"),
+            j -> j.node("schema").isEqualTo("TEST_SCHEMA"),
+            j -> j.node("type").isPresent(),
+            j -> j.node("links.parent").isEqualTo("db://connection/testdb/schema/TEST_SCHEMA")
+        );
+    }
 
-        // Check links
-        JsonNode links = json.get("links");
-        assertTrue(links.has("parent"));
-        assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
+    /**
+     * Finds the entry in a schemas array whose "name" field equals the given
+     * schema name, or returns null if no such entry is present.
+     */
+    private JsonNode findSchemaEntry(JsonNode schemasArray, String schemaName) {
+        for (int i = 0; i < schemasArray.size(); i++) {
+            JsonNode entry = schemasArray.get(i);
+            JsonNode nameNode = entry.get("name");
+            if (nameNode != null && schemaName.equals(nameNode.asString())) {
+                return entry;
+            }
+        }
+        return null;
     }
 }
 

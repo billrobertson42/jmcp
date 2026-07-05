@@ -16,6 +16,7 @@
 
 package test.org.peacetalk.jmcp.jdbc.validation;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.validation.ReadOnlySqlValidator;
 
@@ -160,6 +161,109 @@ class ValidSelectQueriesTest {
         // This is a valid SELECT hint, not a state modification
         assertDoesNotThrow(() ->
             ReadOnlySqlValidator.validateReadOnly(sql));
+    }
+
+    // ========== Unusual-but-valid SELECTs (must NOT be false-positive rejected) ==========
+
+    @Test
+    void testSelectDistinct() {
+        assertDoesNotThrow(() ->
+            ReadOnlySqlValidator.validateReadOnly("SELECT DISTINCT name FROM users"));
+    }
+
+    @Test
+    void testSelectCaseExpression() {
+        String sql = "SELECT CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END AS bracket FROM users";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql));
+    }
+
+    @Test
+    void testSelectExistsSubquery() {
+        String sql = "SELECT 1 WHERE EXISTS (SELECT 1 FROM users WHERE age > 18)";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql));
+    }
+
+    @Test
+    void testParenthesizedSelect() {
+        // A top-level parenthesized SELECT is still read-only.
+        assertDoesNotThrow(() ->
+            ReadOnlySqlValidator.validateReadOnly("(SELECT * FROM users)"));
+    }
+
+    @Test
+    void testSelectWithOrderByLimit() {
+        assertDoesNotThrow(() ->
+            ReadOnlySqlValidator.validateReadOnly("SELECT id FROM users ORDER BY id DESC LIMIT 10"));
+    }
+
+    @Test
+    void testDmlKeywordsInsideStringLiteralAllowed() {
+        // Write keywords appearing only inside quoted string literals must not be
+        // treated as write operations - this is a false-positive guard.
+        String sql = "SELECT 'we should INSERT then UPDATE and DELETE' AS note FROM users";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql),
+            "DML keywords inside a string literal must not trigger rejection");
+        assertTrue(ReadOnlySqlValidator.isReadOnly(sql));
+    }
+
+    @Test
+    void testAggregateFunctionAllowed() {
+        // Guard against the procedure-name heuristic over-matching ordinary functions.
+        assertDoesNotThrow(() ->
+            ReadOnlySqlValidator.validateReadOnly("SELECT SUM(amount), COUNT(*) FROM orders"));
+    }
+
+    @Test
+    void testColumnNamedProcessAllowed() {
+        // A column named "process" (contains the substring "proc") must be allowed.
+        assertDoesNotThrow(() ->
+            ReadOnlySqlValidator.validateReadOnly("SELECT process FROM jobs"));
+    }
+
+    // ========== Known false-positive bugs (correct tests, disabled until validator fixed) ==========
+    // These assert the DESIRED behavior (read-only SELECTs that must be ACCEPTED) but currently
+    // fail because of over-broad string heuristics in ReadOnlySqlValidator. See findings file.
+
+    @Test
+    @Disabled("BUG: procedure-name heuristic matches any function containing 'proc' substring "
+        + "(e.g. reprocess) — see test-review/jdbc-validation.md")
+    void testFunctionNameContainingProcAllowed() {
+        // ReadOnlySqlValidator.java:372 regex \\w*[_]?PROC\\w*\\s*\\( matches reprocess(), preprocessing(), etc.
+        String sql = "SELECT reprocess(id) FROM jobs";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql),
+            "A read-only function whose name merely contains 'proc' must be allowed");
+    }
+
+    @Test
+    @Disabled("BUG: NEXTVAL heuristic matches a column named 'nextval' qualified by an alias "
+        + "(t.nextval) — see test-review/jdbc-validation.md")
+    void testColumnNamedNextvalAllowed() {
+        // ReadOnlySqlValidator.java:352 regex \\w+\\.NEXTVAL\\b matches the plain column reference t.nextval.
+        String sql = "SELECT t.nextval FROM mytable t";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql),
+            "A column literally named 'nextval' is a read-only reference and must be allowed");
+    }
+
+    @Test
+    @Disabled("BUG: keyword heuristics fire on tokens inside string literals — "
+        + "'NEXT VALUE FOR' in a literal is rejected — see test-review/jdbc-validation.md")
+    void testNextValueForInsideStringLiteralAllowed() {
+        // ReadOnlySqlValidator.java:358 does a bare normalized.contains("NEXT VALUE FOR") with no
+        // string-literal guard (unlike the INTO check), so the literal below is wrongly rejected.
+        String sql = "SELECT 'NEXT VALUE FOR promo' AS label FROM campaigns";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql),
+            "'NEXT VALUE FOR' inside a string literal must not be treated as sequence access");
+    }
+
+    @Test
+    @Disabled("BUG: LAST_INSERT_ID(/USE INDEX/proc( heuristics fire inside string literals — "
+        + "see test-review/jdbc-validation.md")
+    void testWriteKeywordFunctionsInsideStringLiteralAllowed() {
+        // ReadOnlySqlValidator.java:346 (LAST_INSERT_ID(), 340 (USE/FORCE/IGNORE INDEX) and 372 (proc()
+        // scan the raw normalized text with no string-literal guard.
+        String sql = "SELECT description FROM notes WHERE description = 'run proc() and USE INDEX'";
+        assertDoesNotThrow(() -> ReadOnlySqlValidator.validateReadOnly(sql),
+            "write-related keywords inside a string literal must not trigger rejection");
     }
 }
 

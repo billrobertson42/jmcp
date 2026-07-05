@@ -23,14 +23,17 @@ import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.resources.ContextResource;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 
+import static net.javacrumbs.jsonunit.assertj.JsonAssertions.assertThatJson;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ContextResourceTest {
@@ -148,14 +151,91 @@ class ContextResourceTest {
     }
 
     @Test
-    void testMultipleReads() throws Exception {
+    void testReadReportsConnectionIdentity() throws Exception {
+        assertThatJson(contextResource.read()).and(
+            j -> j.node("connections").isArray()
+                .describedAs("Only the 'test' connection is registered")
+                .hasSize(1),
+            j -> j.node("connections[0].databaseId").isEqualTo("test"),
+            j -> j.node("connections[0].databaseType").isEqualTo("h2")
+        );
+    }
+
+    @Test
+    void testReadSchemaSummaryReflectsCreatedTable() throws Exception {
+        // The default PUBLIC schema owns test_table; the context summary should surface it.
+        JsonNode root = mapper.readTree(contextResource.read());
+
+        JsonNode publicSchema = findSchema(root, "PUBLIC");
+        assertNotNull(publicSchema, "PUBLIC schema should be present in the context summary");
+        assertTrue(publicSchema.get("isDefault").asBoolean(), "PUBLIC is H2's default schema");
+        assertTrue(publicSchema.get("tableCount").asInt() >= 1,
+            "PUBLIC should report at least the one table we created");
+        assertTrue(schemaContainsTable(publicSchema, "TEST_TABLE"),
+            "PUBLIC schema's table list should include TEST_TABLE");
+    }
+
+    @Test
+    void testSchemaFilterExcludesHiddenSchema() throws Exception {
+        // Create two extra schemas in the shared in-memory database.
+        try (Statement stmt = connection.createStatement()) {
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS VISIBLE_SCHEMA");
+            stmt.execute("CREATE SCHEMA IF NOT EXISTS HIDDEN_SCHEMA");
+        }
+
+        // Register a second connection to the same DB whose schemaFilter omits HIDDEN_SCHEMA.
+        connectionManager.registerConnection(new ConnectionConfig(
+            "filtered", "h2", "jdbc:h2:mem:test", "sa", "",
+            List.of("PUBLIC", "VISIBLE_SCHEMA")));
+
+        JsonNode root = mapper.readTree(contextResource.read());
+
+        JsonNode filteredConn = null;
+        for (JsonNode conn : root.get("connections")) {
+            if ("filtered".equals(conn.get("databaseId").asString())) {
+                filteredConn = conn;
+            }
+        }
+        assertNotNull(filteredConn, "The filtered connection should appear in the context summary");
+
+        assertThatJson(mapper.writeValueAsString(filteredConn))
+            .inPath("$.schemas[*].name")
+            .isArray()
+            .describedAs("schema names visible under the 'filtered' connection")
+            .contains("VISIBLE_SCHEMA", "PUBLIC")
+            .doesNotContain("HIDDEN_SCHEMA", "INFORMATION_SCHEMA");
+    }
+
+    @Test
+    void testMultipleReadsProduceIdenticalOutput() throws Exception {
+        // read() must be side-effect free and deterministic for the same manager state.
         String json1 = contextResource.read();
         String json2 = contextResource.read();
 
-        assertNotNull(json1);
-        assertNotNull(json2);
-        // Both should be valid JSON
-        mapper.readValue(json1, Map.class);
-        mapper.readValue(json2, Map.class);
+        assertEquals(mapper.readTree(json1), mapper.readTree(json2),
+            "Repeated reads of the same state should produce identical context");
+    }
+
+    /**
+     * Finds the schema summary with the given name under the first (only) connection.
+     */
+    private JsonNode findSchema(JsonNode root, String schemaName) {
+        for (JsonNode conn : root.get("connections")) {
+            for (JsonNode schema : conn.get("schemas")) {
+                if (schemaName.equals(schema.get("name").asString())) {
+                    return schema;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean schemaContainsTable(JsonNode schema, String tableName) {
+        for (JsonNode t : schema.get("tables")) {
+            if (tableName.equals(t.asString())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

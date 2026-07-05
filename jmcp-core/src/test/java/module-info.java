@@ -20,5 +20,7 @@ open module org.peacetalk.jmcp.core.test {
     requires org.mockito;
     requires org.mockito.junit.jupiter;
     requires tools.jackson.databind;
+    requires net.javacrumbs.jsonunit.assertj;
+    requires org.assertj.core;
 }
 

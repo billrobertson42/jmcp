@@ -126,6 +126,9 @@ class TablesListResourceTest {
 
         var tables = (java.util.List<?>) response.get("tables");
         assertEquals(2, tables.size(), "Should list both tables");
+        // The *right* tables must be listed, not just any two objects.
+        assertTrue(json.contains("TABLE1") && json.contains("TABLE2"),
+            "listing must name the schema's actual tables");
     }
 
     @Test
@@ -235,6 +238,9 @@ class ViewsListResourceTest {
 
         var views = (java.util.List<?>) response.get("views");
         assertEquals(2, views.size(), "Should list both views");
+        // The *right* views must be listed, not just any two objects.
+        assertTrue(json.contains("VIEW1") && json.contains("VIEW2"),
+            "listing must name the schema's actual views");
     }
 
     @Test
