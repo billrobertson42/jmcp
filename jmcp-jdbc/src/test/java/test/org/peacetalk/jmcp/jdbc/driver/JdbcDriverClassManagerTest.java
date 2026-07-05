@@ -46,11 +46,6 @@ class JdbcDriverClassManagerTest {
     }
 
     @Test
-    void testManagerInitialization() {
-        assertNotNull(driverManager);
-    }
-
-    @Test
     void testLoadH2Driver() throws Exception {
         var classLoader = driverManager.loadDriver("h2");
         assertNotNull(classLoader);

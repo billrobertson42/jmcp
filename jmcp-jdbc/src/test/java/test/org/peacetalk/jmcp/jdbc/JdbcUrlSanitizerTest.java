@@ -16,6 +16,7 @@
 
 package test.org.peacetalk.jmcp.jdbc;
 
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 
@@ -95,12 +96,15 @@ class JdbcUrlSanitizerTest {
 
     @Test
     void testSanitizeUrlCaseInsensitive() {
-        String url = "jdbc:db://host/db?PASSWORD=secret&Pass=secret2&KEY=key1";
+        // Distinct secret values so we can assert each is actually gone, not merely
+        // that the "NAME=****" text is present.
+        String url = "jdbc:db://host/db?PASSWORD=alpha111&Pass=beta222&KEY=gamma333";
         String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
 
-        assertTrue(sanitized.contains("PASSWORD=****"));
-        assertTrue(sanitized.contains("Pass=****"));
-        assertTrue(sanitized.contains("KEY=****"));
+        assertEquals("jdbc:db://host/db?PASSWORD=****&Pass=****&KEY=****", sanitized);
+        assertFalse(sanitized.contains("alpha111"), "uppercase PASSWORD value must be masked");
+        assertFalse(sanitized.contains("beta222"), "mixed-case Pass value must be masked");
+        assertFalse(sanitized.contains("gamma333"), "uppercase KEY value must be masked");
     }
 
     @Test
@@ -307,6 +311,108 @@ class JdbcUrlSanitizerTest {
 
         assertTrue(sanitized.contains("api_key=****"));
         assertFalse(sanitized.contains("apikey123"));
+    }
+
+    // ------------------------------------------------------------------
+    // Boundary / negative cases
+    // ------------------------------------------------------------------
+
+    @Test
+    void testSanitizeUrlEmptyPasswordValue() {
+        // An empty value must still produce the masked form and stay well-formed,
+        // not accidentally swallow the following parameter.
+        String url = "jdbc:db://host/db?password=&timeout=30";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertEquals("jdbc:db://host/db?password=****&timeout=30", sanitized);
+        assertTrue(sanitized.contains("timeout=30"), "trailing parameter must be preserved");
+    }
+
+    @Test
+    void testSanitizeUrlEmptyStringReturnedUnchanged() {
+        // isBlank() short-circuit: an empty string is returned as-is (no NPE, no mask).
+        assertEquals("", JdbcUrlSanitizer.sanitizeUrl(""));
+    }
+
+    @Test
+    void testSanitizeUrlPasswordValueContainingQuestionMark() {
+        // The value regex terminates only on & or ;, so a '?' inside the value is
+        // part of the masked value. Verify the whole secret disappears.
+        String url = "jdbc:mysql://host/db?password=se?cret&user=admin";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertEquals("jdbc:mysql://host/db?password=****&user=admin", sanitized);
+        assertFalse(sanitized.contains("se?cret"), "password with embedded '?' must be masked");
+        assertFalse(sanitized.contains("cret"), "no fragment of the secret may survive");
+    }
+
+    @Test
+    void testSanitizeUrlDoesNotMaskUsernameParam() {
+        // 'user' is not a sensitive parameter name; it must survive verbatim.
+        String url = "jdbc:postgresql://localhost/db?user=admin&password=hunter2";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertEquals("jdbc:postgresql://localhost/db?user=admin&password=****", sanitized);
+        assertTrue(sanitized.contains("user=admin"), "non-sensitive user param must be preserved");
+    }
+
+    @Test
+    void testGetExposableUrlWhenExposeUrlsFalseIgnoresNullUrl() {
+        // When URLs are hidden, even a null input yields the fixed mask (no NPE, no leak).
+        assertEquals("****", JdbcUrlSanitizer.getExposableUrl(null, false));
+    }
+
+    @Test
+    void testGetExposableUrlWhenExposeUrlsTrueAndUrlNull() {
+        // Exposed + null delegates to sanitizeUrl, which returns null for null input.
+        assertNull(JdbcUrlSanitizer.getExposableUrl(null, true));
+    }
+
+    @Test
+    void testSanitizeUrlOracleStyleRemovesSecretEntirely() {
+        // Strengthened over the presence-only Oracle test: assert the actual
+        // password token is gone, and the safe user/host parts remain.
+        String url = "jdbc:oracle:thin://scott/tigerpw@myhost:1521/orcl";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertEquals("jdbc:oracle:thin://scott/****@myhost:1521/orcl", sanitized);
+        assertFalse(sanitized.contains("tigerpw"), "Oracle password must be masked");
+        assertTrue(sanitized.contains("scott"), "Oracle username must be preserved");
+        assertTrue(sanitized.contains("myhost:1521/orcl"), "host/service must be preserved");
+    }
+
+    // ------------------------------------------------------------------
+    // Credential-leak regressions (currently failing — see test-review/jdbc-core.md)
+    // ------------------------------------------------------------------
+
+    @Test
+    @Disabled("BUG: userinfo 'user:password@host' form leaks the password — "
+        + "JdbcUrlSanitizer.java:39 ORACLE_PASSWORD_PATTERN only handles 'user/password@', "
+        + "not the standard URI colon form; SENSITIVE_PARAM_PATTERN needs a ?&; delimiter. "
+        + "See test-review/jdbc-core.md")
+    void testSanitizeUrlUserInfoColonFormMasksPassword() {
+        // Standard JDBC URI userinfo form: jdbc:<db>://user:password@host/db
+        String url = "jdbc:postgresql://admin:secretpw@localhost:5432/mydb";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertFalse(sanitized.contains("secretpw"),
+            "password in userinfo (user:password@host) must not leak");
+        assertTrue(sanitized.contains("localhost:5432/mydb"), "host/db must be preserved");
+    }
+
+    @Test
+    @Disabled("BUG: Oracle EZConnect form 'user/password@//host:port/service' leaks the password — "
+        + "JdbcUrlSanitizer.java:39 ORACLE_PASSWORD_PATTERN requires '//' BEFORE the user, but in "
+        + "the canonical Oracle thin form the '//' appears AFTER the '@', so the pattern never matches. "
+        + "See test-review/jdbc-core.md")
+    void testSanitizeUrlOracleEzConnectFormMasksPassword() {
+        // Canonical Oracle thin driver form (Oracle docs / most tutorials).
+        String url = "jdbc:oracle:thin:scott/tigerpw@//myhost:1521/orcl";
+        String sanitized = JdbcUrlSanitizer.sanitizeUrl(url);
+
+        assertFalse(sanitized.contains("tigerpw"),
+            "Oracle EZConnect password must not leak");
+        assertTrue(sanitized.contains("scott"), "username must be preserved");
     }
 }
 

@@ -24,6 +24,11 @@ import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
+import org.peacetalk.jmcp.jdbc.resources.ProcedureResource;
+import org.peacetalk.jmcp.jdbc.resources.RelationshipsResource;
+import org.peacetalk.jmcp.jdbc.resources.SchemaRelationshipsResource;
+import org.peacetalk.jmcp.jdbc.resources.TablesListResource;
+import org.peacetalk.jmcp.jdbc.resources.ViewsListResource;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.sql.Connection;
@@ -152,7 +157,83 @@ class JdbcResourceProviderTest {
         assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/view/USER_VIEW", resource.getUri());
     }
 
+    @Test
+    void testGetResourceProcedure() {
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/procedure/CALC");
+        assertNotNull(resource, "procedure/{name} URI should route to a resource");
+        assertInstanceOf(ProcedureResource.class, resource,
+            "procedure/{name} should route to ProcedureResource");
+        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/procedure/CALC", resource.getUri());
+    }
+
+    // Collection-level (5-segment) routing tests
+
+    @Test
+    void testGetResourceTablesCollection() {
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/tables");
+        assertNotNull(resource, "tables collection URI should route to a resource");
+        assertInstanceOf(TablesListResource.class, resource,
+            "tables collection should route to TablesListResource");
+        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/tables", resource.getUri());
+    }
+
+    @Test
+    void testGetResourceViewsCollection() {
+        // Regression: JdbcResourceProvider now routes the "views" collection URI.
+        // Would fail if handleObjectResource dropped the "views" case (returning null).
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/views");
+        assertNotNull(resource, "views collection URI should route to a resource");
+        assertInstanceOf(ViewsListResource.class, resource,
+            "views collection should route to ViewsListResource, not a view detail resource");
+        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/views", resource.getUri());
+    }
+
+    @Test
+    void testGetResourceSchemaRelationshipsCollection() {
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/relationships");
+        assertNotNull(resource, "schema relationships URI should route to a resource");
+        assertInstanceOf(SchemaRelationshipsResource.class, resource,
+            "schema-level relationships should route to SchemaRelationshipsResource");
+        assertEquals(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/relationships", resource.getUri());
+    }
+
+    @Test
+    void testGetResourceConnectionRelationships() {
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/relationships");
+        assertNotNull(resource, "connection relationships URI should route to a resource");
+        assertInstanceOf(RelationshipsResource.class, resource,
+            "connection-level relationships should route to RelationshipsResource");
+        assertEquals(SCHEME + "://connection/testdb/relationships", resource.getUri());
+    }
+
     // Invalid URI tests
+
+    @Test
+    void testGetResourceUnknownCollection() {
+        // 5 segments but the collection name is not tables/views/relationships -> null
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/bogus");
+        assertNull(resource, "Unknown collection type should not route to any resource");
+    }
+
+    @Test
+    void testGetResourceUnknownObjectType() {
+        // 6 segments but the object type is not table/view/procedure -> null
+        Resource resource = provider.getResource(SCHEME + "://connection/testdb/schema/TEST_SCHEMA/widget/NAME");
+        assertNull(resource, "Unknown object type should not route to any resource");
+    }
+
+    @Test
+    void testGetResourceCollectionUnknownConnection() {
+        // Connection existence is validated before building a collection resource
+        Resource resource = provider.getResource(SCHEME + "://connection/nope/schema/TEST_SCHEMA/views");
+        assertNull(resource, "Collection URIs for unknown connections should return null");
+    }
+
+    @Test
+    void testGetResourceEmptyString() {
+        Resource resource = provider.getResource("");
+        assertNull(resource, "Empty URI has no scheme prefix and must return null");
+    }
 
     @Test
     void testGetResourceInvalidScheme() {

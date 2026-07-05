@@ -18,11 +18,16 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcRequest;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
+// NOTE: exact-key-name/field-count checks below pin the JSON-RPC 2.0 wire spec
+// (a Java field rename could silently break it), NOT Jackson's ability to serialize.
 class JsonRpcRequestTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     void testRequestCreation() {
@@ -50,5 +55,77 @@ class JsonRpcRequestTest {
         JsonRpcRequest request = new JsonRpcRequest(null, 1, "test", null);
         assertEquals("2.0", request.jsonrpc());
     }
-}
 
+    @Test
+    void testBlankMethodRejected() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new JsonRpcRequest("2.0", 1, "", null),
+            "empty method must be rejected by the compact constructor");
+        assertThrows(IllegalArgumentException.class, () ->
+            new JsonRpcRequest("2.0", 1, "   ", null),
+            "blank method must be rejected by the compact constructor");
+        assertThrows(IllegalArgumentException.class, () ->
+            new JsonRpcRequest("2.0", 1, null, null),
+            "null method must be rejected by the compact constructor");
+    }
+
+    @Test
+    void testSerializesExactShapeAndOmitsNullFields() {
+        // A request with no id and no params must omit both fields (NON_NULL),
+        // and jsonrpc/method must use their exact JSON keys.
+        JsonRpcRequest request = new JsonRpcRequest("2.0", null, "tools/list", null);
+
+        JsonNode node = mapper.valueToTree(request);
+
+        assertEquals("2.0", node.get("jsonrpc").asText(), "version must serialize under key 'jsonrpc'");
+        assertEquals("tools/list", node.get("method").asText(), "method must serialize under key 'method'");
+        assertFalse(node.has("id"), "null id must be omitted (NON_NULL)");
+        assertFalse(node.has("params"), "null params must be omitted (NON_NULL)");
+        assertEquals(2, node.size(), "notification-style request should serialize exactly jsonrpc + method");
+    }
+
+    @Test
+    void testSerializesIdAndParamsWhenPresent() {
+        JsonRpcRequest request = new JsonRpcRequest("2.0", 7, "ping", "some-params");
+
+        JsonNode node = mapper.valueToTree(request);
+
+        assertEquals(7, node.get("id").intValue(), "numeric id must serialize under key 'id'");
+        assertEquals("some-params", node.get("params").asText(), "params must serialize under key 'params'");
+    }
+
+    @Test
+    void testRoundTripWithNumericId() throws Exception {
+        JsonRpcRequest original = new JsonRpcRequest("2.0", 42, "tools/call", null);
+
+        String json = mapper.writeValueAsString(original);
+        JsonRpcRequest deserialized = mapper.readValue(json, JsonRpcRequest.class);
+
+        assertEquals(original.jsonrpc(), deserialized.jsonrpc());
+        assertEquals(original.method(), deserialized.method());
+        assertEquals(42, ((Number) deserialized.id()).intValue(), "numeric id must round-trip");
+        assertNull(deserialized.params(), "absent params must deserialize back to null");
+    }
+
+    @Test
+    void testRoundTripWithStringId() throws Exception {
+        JsonRpcRequest original = new JsonRpcRequest("2.0", "abc-123", "tools/call", null);
+
+        String json = mapper.writeValueAsString(original);
+        JsonRpcRequest deserialized = mapper.readValue(json, JsonRpcRequest.class);
+
+        assertEquals("abc-123", deserialized.id(), "string id must round-trip unchanged");
+    }
+
+    @Test
+    void testDeserializeAppliesDefaultVersionWhenAbsent() throws Exception {
+        // jsonrpc absent from the wire => compact constructor defaults it to "2.0".
+        String json = """
+                {"id":1,"method":"ping"}""";
+
+        JsonRpcRequest request = mapper.readValue(json, JsonRpcRequest.class);
+
+        assertEquals("2.0", request.jsonrpc(), "missing jsonrpc must default to 2.0 on deserialize");
+        assertEquals("ping", request.method());
+    }
+}

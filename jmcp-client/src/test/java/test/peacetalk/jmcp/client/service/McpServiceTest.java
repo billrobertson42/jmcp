@@ -145,6 +145,9 @@ class McpServiceTest {
         List<Tool> original = Arrays.asList(z, a);
         List<Tool> sorted = service.sortTools(original);
 
+        // sortTools must return a new list rather than sorting in place.
+        assertNotSame(original, sorted, "sortTools should not return the same list instance");
+
         // Original list should be unchanged
         assertSame(z, original.get(0));
         assertSame(a, original.get(1));

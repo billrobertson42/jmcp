@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
+import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
@@ -43,7 +44,7 @@ class ConnectionManagerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        JdbcDriverClassManager driverManager = new JdbcDriverClassManager(tempDir);
+        driverManager = new JdbcDriverClassManager(tempDir);
         connectionManager = new ConnectionManager(driverManager);
     }
 
@@ -82,8 +83,40 @@ class ConnectionManagerTest {
 
     @Test
     void testGetContextNotFound() {
-        assertThrows(RuntimeException.class, () ->
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
             connectionManager.getContext("nonexistent"));
+        assertTrue(ex.getMessage().contains("nonexistent"),
+            "error should name the missing connection id");
+    }
+
+    @Test
+    void testRegisterDuplicateConnectionIdThrows() {
+        ConnectionConfig first = ConnectionConfig.basic("dup", "h2",
+                "jdbc:h2:mem:db1", "sa", "");
+        ConnectionConfig second = ConnectionConfig.basic("dup", "h2",
+                "jdbc:h2:mem:db2", "sa", "");
+
+        assertDoesNotThrow(() -> connectionManager.registerConnection(first));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> connectionManager.registerConnection(second));
+        assertTrue(ex.getMessage().contains("dup"),
+            "duplicate-id error should name the offending id");
+
+        // The original registration must be untouched (still the db1 context).
+        assertEquals("jdbc:h2:mem:db1", connectionManager.getContext("dup").getJdbcUrl());
+    }
+
+    @Test
+    void testRegisterUnknownDatabaseTypeThrows() {
+        ConnectionConfig config = ConnectionConfig.basic("bad", "not-a-db",
+                "jdbc:nope:mem:x", "sa", "");
+
+        assertThrows(IllegalArgumentException.class,
+            () -> connectionManager.registerConnection(config));
+        // A failed registration must not leave a phantom entry behind.
+        assertThrows(IllegalArgumentException.class,
+            () -> connectionManager.getContext("bad"));
     }
 
     @Test
@@ -160,21 +193,26 @@ class ConnectionManagerTest {
     }
 
     @Test
-    void testUrlSanitization() throws Exception {
-        // Test that URLs are properly handled based on exposeUrls setting
-        String testUrl = "jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1";
+    void testExposeUrlsReturnsSanitizedUrl() throws Exception {
+        // When exposeUrls=true the manager returns the real URL run through the
+        // sanitizer (rather than the fully-hidden "****"). We use a connectable
+        // H2 URL here because registerConnection eagerly opens a pool; the
+        // masking of embedded secrets itself is covered directly in
+        // JdbcUrlSanitizerTest.
+        String testUrl = "jdbc:h2:mem:exposetest;DB_CLOSE_DELAY=-1";
 
-        // Set exposeUrls to true so we can see the URL
         connectionManager.setExposeUrls(true);
-        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
+        connectionManager.registerConnection(
+            ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
 
         List<ConnectionInfo> connections = connectionManager.listConnections();
         assertEquals(1, connections.size());
 
         String exposedUrl = connections.getFirst().url();
-        assertNotNull(exposedUrl);
-        // When exposeUrls is true, URL should be visible (possibly sanitized if it had sensitive params)
-        assertTrue(exposedUrl.contains("jdbc:h2"), "URL should be visible when exposeUrls is true");
+        assertNotEquals("****", exposedUrl,
+            "with exposeUrls=true the URL must not be fully hidden");
+        assertEquals(JdbcUrlSanitizer.sanitizeUrl(testUrl), exposedUrl,
+            "exposed URL must be the sanitized form of the registered URL");
     }
 
     @Test
@@ -196,18 +234,47 @@ class ConnectionManagerTest {
 
         List<ConnectionInfo> connections = connectionManager.listConnections();
         assertEquals(1, connections.size());
-        assertNotEquals("****", connections.getFirst().url());
+        // With no sensitive params, the exposed URL is the exact original.
+        assertEquals(testUrl, connections.getFirst().url());
     }
 
     @Test
-    void testCloseConnection() throws Exception {
+    void testExposeUrlsDefaultsToFalse() {
+        // Security default: URLs are hidden unless explicitly enabled.
+        assertFalse(connectionManager.isExposeUrls(),
+            "exposeUrls must default to false for security");
+    }
+
+    @Test
+    void testCloseConnectionErrorNamesMissingId() throws Exception {
         connectionManager.registerConnection(ConnectionConfig.basic("test-h2", "h2",
                 "jdbc:h2:mem:testdb", "sa", ""));
-
         connectionManager.closeConnection("test-h2");
 
-        assertThrows(Exception.class, () ->
-            connectionManager.getContext("test-h2"));
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> connectionManager.getContext("test-h2"));
+        assertTrue(ex.getMessage().contains("test-h2"),
+            "post-close lookup error should name the id");
+    }
+
+    @Test
+    void testCloseUnknownConnectionIsNoOp() {
+        // Closing an id that was never registered must be silently ignored.
+        assertDoesNotThrow(() -> connectionManager.closeConnection("never-registered"));
+    }
+
+    @Test
+    void testConnectionInfoUsernameIsExactValue() throws Exception {
+        connectionManager.setExposeUrls(true);
+        connectionManager.registerConnection(ConnectionConfig.basic("test-h2", "h2",
+                "jdbc:h2:mem:testdb", "myuser", "mypassword"));
+
+        ConnectionInfo info = connectionManager.listConnections().getFirst();
+        assertEquals("myuser", info.username(), "username must be surfaced verbatim");
+        // ConnectionInfo carries no password field; the config password must not
+        // leak through any other field.
+        assertFalse(String.valueOf(info.url()).contains("mypassword"),
+            "config password must never appear in the exposed URL");
     }
 
     @Test

@@ -1085,15 +1085,6 @@ class ReadOnlySqlValidatorTest {
             ReadOnlySqlValidator.validateReadOnly("BATCH ON"));
     }
 
-    @Test
-    void testRejectClientCommand() {
-        // Client command prefix (psql \c)
-        // Note: These are client-side commands, not SQL
-        String sql = "\\c other_database";
-        // Client commands are typically handled at client level
-        // Included for reference
-    }
-
     // ========== GRANT/REVOKE (Security/Permission Statements) ==========
 
     @Test

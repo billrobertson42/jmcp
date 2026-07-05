@@ -176,7 +176,36 @@ class JdbcResourcesTest {
         assertTrue(json.has("schemas"));
         assertTrue(json.has("links"));
         assertTrue(json.get("schemas").isArray());
-        assertTrue(json.get("schemas").size() > 0);
+
+        // With all schemas visible, TEST_SCHEMA should be listed with its navigation URIs.
+        JsonNode testSchema = findSchemaEntry(json.get("schemas"), "TEST_SCHEMA");
+        assertNotNull(testSchema, "TEST_SCHEMA should appear in the schema listing");
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA",
+            testSchema.get("resourceUri").asString());
+        assertEquals("db://connection/testdb/schema/TEST_SCHEMA/tables",
+            testSchema.get("tablesUri").asString());
+
+        // Parent link points back at the connection.
+        assertEquals("db://connection/testdb", json.get("links").get("parent").asString());
+    }
+
+    @Test
+    void testSchemasListResourceExcludesFilteredSchema() throws Exception {
+        // Reconfigure the shared mock context so TEST_SCHEMA is hidden by the schema filter.
+        ConnectionContext filteredContext = mock(ConnectionContext.class);
+        when(filteredContext.getConnection()).thenReturn(connection);
+        when(filteredContext.isSchemaVisible(anyString())).thenReturn(true);
+        when(filteredContext.isSchemaVisible("TEST_SCHEMA")).thenReturn(false);
+        when(mockConnectionManager.getContext("testdb")).thenReturn(filteredContext);
+
+        SchemasListResource resource = new SchemasListResource("testdb", mockConnectionManager);
+        JsonNode json = mapper.readTree(resource.read());
+
+        assertNull(findSchemaEntry(json.get("schemas"), "TEST_SCHEMA"),
+            "A schema hidden by isSchemaVisible must be absent from the listing");
+        // Other schemas remain visible, so exclusion is targeted rather than emptying the list.
+        assertNotNull(findSchemaEntry(json.get("schemas"), "PUBLIC"),
+            "Schemas still allowed by the filter should remain visible");
     }
 
     // SchemaResource tests
@@ -471,6 +500,21 @@ class JdbcResourcesTest {
         JsonNode links = json.get("links");
         assertTrue(links.has("parent"));
         assertEquals("db://connection/testdb/schema/TEST_SCHEMA", links.get("parent").asString());
+    }
+
+    /**
+     * Finds the entry in a schemas array whose "name" field equals the given
+     * schema name, or returns null if no such entry is present.
+     */
+    private JsonNode findSchemaEntry(JsonNode schemasArray, String schemaName) {
+        for (int i = 0; i < schemasArray.size(); i++) {
+            JsonNode entry = schemasArray.get(i);
+            JsonNode nameNode = entry.get("name");
+            if (nameNode != null && schemaName.equals(nameNode.asString())) {
+                return entry;
+            }
+        }
+        return null;
     }
 }
 

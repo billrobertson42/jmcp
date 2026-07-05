@@ -64,9 +64,42 @@ class JdbcMcpProviderTest {
     }
 
     @Test
-    void testProviderInitialization() throws Exception {
+    void testProviderInitializationRegistersTools() throws Exception {
         provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
-        assertNotNull(provider);
+        // configure() must populate the tool list and the resource provider.
+        assertFalse(provider.getTools().isEmpty(), "configure should register tools");
+        assertNotNull(provider.getResourceProvider(), "configure should create a resource provider");
+    }
+
+    @Test
+    void testGetToolsEmptyBeforeConfigure() {
+        // Before configure(), no tools are registered — must be an empty list, not null.
+        List<Tool> tools = provider.getTools();
+        assertNotNull(tools, "getTools must never return null");
+        assertTrue(tools.isEmpty(), "no tools should exist before configure()");
+    }
+
+    @Test
+    void testGetResourceProviderNullBeforeConfigure() {
+        assertNull(provider.getResourceProvider(),
+            "resource provider should not exist before configure()");
+    }
+
+    @Test
+    void testNullConnectionsKeyThrows() {
+        // A config object present but with no 'connections' key maps to a null array,
+        // which must be rejected just like an empty list.
+        Map<String, Object> config = Map.of("default_id", "x", "expose_urls", false);
+        IllegalStateException ex = assertThrows(IllegalStateException.class,
+            () -> provider.configure(config));
+        assertTrue(ex.getMessage().contains("no connections"),
+            "missing connections key should surface the 'no connections' error");
+    }
+
+    @Test
+    void testShutdownIsIdempotentBeforeConfigure() {
+        // shutdown() with nothing configured must not throw (null-guards in place).
+        assertDoesNotThrow(() -> provider.shutdown());
     }
 
     @Test
@@ -102,12 +135,27 @@ class JdbcMcpProviderTest {
 
         List<Tool> tools = provider.getTools();
         assertNotNull(tools);
-        assertFalse(tools.isEmpty());
 
-        assertTrue(tools.stream().anyMatch(t -> "query".equals(t.getName())),
-            "Should have query tool");
-        assertTrue(tools.stream().anyMatch(t -> "get-row-count".equals(t.getName())),
-            "Should have get-row-count tool");
+        List<String> names = tools.stream().map(Tool::getName).toList();
+        // All five JDBC tools registered in configure() must be exposed.
+        assertTrue(names.contains("query"), "should have query tool");
+        assertTrue(names.contains("explain-query"), "should have explain-query tool");
+        assertTrue(names.contains("get-row-count"), "should have get-row-count tool");
+        assertTrue(names.contains("sample-data"), "should have sample-data tool");
+        assertTrue(names.contains("analyze-column"), "should have analyze-column tool");
+        assertEquals(5, tools.size(), "exactly the five JDBC tools should be registered");
+    }
+
+    @Test
+    void testGetToolsReturnsDefensiveCopy() throws Exception {
+        provider.configure(h2Config("test-db", "jdbc:h2:mem:test"));
+
+        List<Tool> tools = provider.getTools();
+        int original = tools.size();
+        tools.clear();  // mutate the returned list
+
+        assertEquals(original, provider.getTools().size(),
+            "getTools should return a copy; caller mutation must not affect the provider");
     }
 
     @Test

@@ -109,7 +109,8 @@ class ResourcesHandlerTest {
         JsonNode content = result.get("contents").get(0);
         assertEquals("test://root", content.get("uri").asString());
         assertEquals("application/json", content.get("mimeType").asString());
-        assertEquals("{\"data\":\"root\"}", content.get("text").asString());
+        assertEquals("""
+                {"data":"root"}""", content.get("text").asString());
     }
 
     @Test
@@ -179,8 +180,16 @@ class ResourcesHandlerTest {
         assertNull(response.error());
 
         JsonNode result = mapper.valueToTree(response.result());
-        // Should have resources from both providers
-        assertTrue(result.get("resources").size() > 2);
+        // Aggregates both providers: 2 from testProvider + 1 from the other = exactly 3.
+        JsonNode resources = result.get("resources");
+        assertEquals(3, resources.size(), "list must aggregate every provider's resources");
+        boolean hasOther = false;
+        for (int i = 0; i < resources.size(); i++) {
+            if ("other://data".equals(resources.get(i).get("uri").asString())) {
+                hasOther = true;
+            }
+        }
+        assertTrue(hasOther, "the second provider's resource must appear in the aggregated list");
     }
 
     @Test
@@ -197,6 +206,52 @@ class ResourcesHandlerTest {
 
         assertNotNull(response);
         assertNull(response.error());
+
+        // The content must come from the SECOND provider, not be misrouted to the first.
+        JsonNode content = mapper.valueToTree(response.result()).get("contents").get(0);
+        assertEquals("other://data", content.get("uri").asString());
+        assertEquals("""
+                {"data":"other"}""", content.get("text").asString(),
+            "read must be dispatched to the provider whose scheme matches the URI");
+    }
+
+    @Test
+    void testHandleReadResourceMissingUri() {
+        // No "uri" param at all: the request cannot name a resource, so it must be
+        // rejected with an error (not a spurious success or an NPE) and no result.
+        ObjectNode params = mapper.createObjectNode();
+        JsonRpcRequest request = new JsonRpcRequest("2.0", 1, "resources/read", params);
+
+        JsonRpcResponse response = handler.handle(request);
+
+        assertNotNull(response);
+        assertNull(response.result(), "a request with no uri must not produce a result");
+        assertNotNull(response.error());
+        // Current behavior: deserializing params without a uri fails and is reported
+        // as a generic internal error (-32603). Arguably a missing required param
+        // would be better reported as invalid-params (-32602); this pins the
+        // present behavior so any such hardening surfaces as a deliberate change.
+        assertEquals(-32603, response.error().code());
+    }
+
+    @Test
+    void testHandleReadResourceReadThrows() {
+        // A provider whose resource.read() throws a runtime error must surface as a
+        // JSON-RPC internal error, not be swallowed or reported as success.
+        ResourcesHandler boomHandler = new ResourcesHandler();
+        boomHandler.registerResourceProvider(new ThrowingResourceProvider());
+
+        ObjectNode params = mapper.createObjectNode();
+        params.put("uri", "boom://x");
+        JsonRpcRequest request = new JsonRpcRequest("2.0", 1, "resources/read", params);
+
+        JsonRpcResponse response = boomHandler.handle(request);
+
+        assertNotNull(response);
+        assertNotNull(response.error());
+        assertEquals(-32603, response.error().code(), "a read() failure is an internal error");
+        assertTrue(response.error().message().contains("Resource read failed"),
+            "message should indicate the read failed, but was: " + response.error().message());
     }
 
     /**
@@ -209,17 +264,21 @@ class ResourcesHandlerTest {
         @Override
         public List<Resource> listResources(String cursor) {
             return List.of(
-                new TestResource("test://root", "Test Root", "{\"data\":\"root\"}"),
-                new TestResource("test://child", "Test Child", "{\"data\":\"child\"}")
+                new TestResource("test://root", "Test Root", """
+                {"data":"root"}"""),
+                new TestResource("test://child", "Test Child", """
+                {"data":"child"}""")
             );
         }
 
         @Override
         public Resource getResource(String uri) {
             if ("test://root".equals(uri)) {
-                return new TestResource("test://root", "Test Root", "{\"data\":\"root\"}");
+                return new TestResource("test://root", "Test Root", """
+                {"data":"root"}""");
             } else if ("test://child".equals(uri)) {
-                return new TestResource("test://child", "Test Child", "{\"data\":\"child\"}");
+                return new TestResource("test://child", "Test Child", """
+                {"data":"child"}""");
             }
             return null;
         }
@@ -248,14 +307,16 @@ class ResourcesHandlerTest {
         @Override
         public List<Resource> listResources(String cursor) {
             return List.of(
-                new TestResource("other://data", "Other Data", "{\"data\":\"other\"}")
+                new TestResource("other://data", "Other Data", """
+                {"data":"other"}""")
             );
         }
 
         @Override
         public Resource getResource(String uri) {
             if ("other://data".equals(uri)) {
-                return new TestResource("other://data", "Other Data", "{\"data\":\"other\"}");
+                return new TestResource("other://data", "Other Data", """
+                {"data":"other"}""");
             }
             return null;
         }
@@ -271,6 +332,44 @@ class ResourcesHandlerTest {
         @Override
         public String getName() {
             return "Other Provider";
+        }
+    }
+
+    /**
+     * Provider whose resource read() always throws, to exercise the handler's
+     * internal-error path.
+     */
+    static class ThrowingResourceProvider implements ResourceProvider {
+        @Override
+        public void initialize() {}
+
+        @Override
+        public List<Resource> listResources(String cursor) {
+            return List.of();
+        }
+
+        @Override
+        public Resource getResource(String uri) {
+            return new Resource() {
+                @Override public String getUri() { return uri; }
+                @Override public String getName() { return "boom"; }
+                @Override public String getDescription() { return "always fails"; }
+                @Override public String getMimeType() { return "application/json"; }
+                @Override public String read() { throw new RuntimeException("kaboom"); }
+            };
+        }
+
+        @Override
+        public boolean supportsScheme(String scheme) {
+            return "boom".equals(scheme);
+        }
+
+        @Override
+        public void shutdown() {}
+
+        @Override
+        public String getName() {
+            return "Throwing Provider";
         }
     }
 

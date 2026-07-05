@@ -18,11 +18,16 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
+// NOTE: exact-key-name/field-count checks below pin the JSON-RPC 2.0 wire spec
+// (a Java field rename could silently break it), NOT Jackson's ability to serialize.
 class JsonRpcErrorTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     void testErrorCreation() {
@@ -44,11 +49,22 @@ class JsonRpcErrorTest {
     }
 
     @Test
+    void testStandardErrorCodeConstants() {
+        // Guards the exact numeric JSON-RPC 2.0 error codes against accidental edits.
+        assertEquals(-32700, JsonRpcError.PARSE_ERROR);
+        assertEquals(-32600, JsonRpcError.INVALID_REQUEST);
+        assertEquals(-32601, JsonRpcError.METHOD_NOT_FOUND);
+        assertEquals(-32602, JsonRpcError.INVALID_PARAMS);
+        assertEquals(-32603, JsonRpcError.INTERNAL_ERROR);
+    }
+
+    @Test
     void testParseError() {
         JsonRpcError error = JsonRpcError.parseError("Parse failed");
 
         assertEquals(JsonRpcError.PARSE_ERROR, error.code());
         assertEquals("Parse failed", error.message());
+        assertNull(error.data(), "factory-created error should have null data");
     }
 
     @Test
@@ -74,5 +90,67 @@ class JsonRpcErrorTest {
         assertEquals(JsonRpcError.INTERNAL_ERROR, error.code());
         assertEquals("Database connection failed", error.message());
     }
-}
 
+    @Test
+    void testSerializesExactShapeAndOmitsNullData() {
+        // code is a primitive int (always serialized); message present; null data omitted (NON_NULL).
+        JsonRpcError error = new JsonRpcError(-32601, "Method not found: foo", null);
+
+        JsonNode node = mapper.valueToTree(error);
+
+        assertEquals(-32601, node.get("code").intValue(), "code must serialize under the JSON key 'code'");
+        assertEquals("Method not found: foo", node.get("message").asText(),
+            "message must serialize under the JSON key 'message'");
+        assertFalse(node.has("data"), "null data must be omitted (NON_NULL)");
+        assertEquals(2, node.size(), "error with null data should serialize exactly code + message");
+    }
+
+    @Test
+    void testCodeZeroIsSerialized() {
+        // code is a primitive int, so even the value 0 must appear in the JSON
+        // (a boxed Integer with NON_NULL would still serialize 0, but this pins
+        //  that the field is never dropped for the default-looking value).
+        JsonRpcError error = new JsonRpcError(0, "zero code", null);
+
+        JsonNode node = mapper.valueToTree(error);
+
+        assertTrue(node.has("code"), "primitive int code must always be serialized, even when 0");
+        assertEquals(0, node.get("code").intValue());
+    }
+
+    @Test
+    void testDataSerializedWhenPresent() {
+        JsonRpcError error = new JsonRpcError(-32000, "custom", "extra-detail");
+
+        JsonNode node = mapper.valueToTree(error);
+
+        assertTrue(node.has("data"), "non-null data must be serialized");
+        assertEquals("extra-detail", node.get("data").asText());
+    }
+
+    @Test
+    void testRoundTrip() throws Exception {
+        // data as a String survives; code and message survive.
+        JsonRpcError original = new JsonRpcError(-32000, "custom", "extra-detail");
+
+        String json = mapper.writeValueAsString(original);
+        JsonRpcError deserialized = mapper.readValue(json, JsonRpcError.class);
+
+        assertEquals(original.code(), deserialized.code());
+        assertEquals(original.message(), deserialized.message());
+        assertEquals(original.data(), deserialized.data(),
+            "String data must round-trip back to an equal value");
+    }
+
+    @Test
+    void testRoundTripWithNullData() throws Exception {
+        JsonRpcError original = JsonRpcError.parseError("bad json");
+
+        String json = mapper.writeValueAsString(original);
+        JsonRpcError deserialized = mapper.readValue(json, JsonRpcError.class);
+
+        assertEquals(original.code(), deserialized.code());
+        assertEquals(original.message(), deserialized.message());
+        assertNull(deserialized.data(), "absent data must deserialize back to null");
+    }
+}

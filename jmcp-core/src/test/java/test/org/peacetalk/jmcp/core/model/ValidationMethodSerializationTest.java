@@ -20,12 +20,20 @@ import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.Content;
 import org.peacetalk.jmcp.core.model.JsonRpcError;
 import org.peacetalk.jmcp.core.model.JsonRpcResponse;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Test that validation methods are not serialized to JSON
+ * Tests that {@code @JsonIgnore}-annotated bean-validation helper methods
+ * (isValid / isValidTextContent / isValidImageContent) never leak into the
+ * serialized JSON as derived properties. A regression here would surface as an
+ * unexpected "valid"/"validTextContent"/"validImageContent" key.
+ *
+ * <p>Assertions inspect the parsed JSON tree with {@code has(...)} rather than
+ * substring matching so that field names embedded in string values cannot mask
+ * a real leak.
  */
 class ValidationMethodSerializationTest {
 
@@ -35,20 +43,18 @@ class ValidationMethodSerializationTest {
     void testJsonRpcResponseDoesNotSerializeValidMethod() throws Exception {
         JsonRpcResponse response = JsonRpcResponse.success(1, "result");
 
-        String json = mapper.writeValueAsString(response);
+        JsonNode node = mapper.valueToTree(response);
 
-        // Should not contain "valid" field
-        assertFalse(json.contains("\"valid\""), "JSON should not contain 'valid' field: " + json);
+        // The @JsonIgnore isValid() accessor must not appear as a "valid" property.
+        assertFalse(node.has("valid"), "JSON should not contain derived 'valid' field: " + node);
 
-        // Should contain expected fields
-        assertTrue(json.contains("\"jsonrpc\""));
-        assertTrue(json.contains("\"id\""));
-        assertTrue(json.contains("\"result\""));
+        // Expected fields present with exact values.
+        assertEquals("2.0", node.get("jsonrpc").asText());
+        assertEquals(1, node.get("id").intValue());
+        assertEquals("result", node.get("result").asText());
 
-        // Should be able to deserialize
-        JsonRpcResponse deserialized = mapper.readValue(json, JsonRpcResponse.class);
+        JsonRpcResponse deserialized = mapper.readValue(mapper.writeValueAsString(response), JsonRpcResponse.class);
         assertEquals(response.jsonrpc(), deserialized.jsonrpc());
-        assertEquals(response.id(), deserialized.id());
         assertEquals(response.result(), deserialized.result());
     }
 
@@ -57,17 +63,15 @@ class ValidationMethodSerializationTest {
         JsonRpcError error = new JsonRpcError(-32600, "Invalid Request", null);
         JsonRpcResponse response = JsonRpcResponse.error(1, error);
 
-        String json = mapper.writeValueAsString(response);
+        JsonNode node = mapper.valueToTree(response);
 
-        // Should not contain "valid" field
-        assertFalse(json.contains("\"valid\""), "JSON should not contain 'valid' field: " + json);
+        assertFalse(node.has("valid"), "JSON should not contain derived 'valid' field: " + node);
 
-        // Should contain expected fields
-        assertTrue(json.contains("\"jsonrpc\""));
-        assertTrue(json.contains("\"error\""));
+        assertEquals("2.0", node.get("jsonrpc").asText());
+        assertTrue(node.has("error"));
+        assertEquals(-32600, node.get("error").get("code").intValue());
 
-        // Should be able to deserialize
-        JsonRpcResponse deserialized = mapper.readValue(json, JsonRpcResponse.class);
+        JsonRpcResponse deserialized = mapper.readValue(mapper.writeValueAsString(response), JsonRpcResponse.class);
         assertEquals(response.jsonrpc(), deserialized.jsonrpc());
         assertEquals(response.error().code(), deserialized.error().code());
     }
@@ -76,42 +80,34 @@ class ValidationMethodSerializationTest {
     void testContentDoesNotSerializeValidationMethods() throws Exception {
         Content textContent = Content.text("Hello, world!");
 
-        String json = mapper.writeValueAsString(textContent);
+        JsonNode node = mapper.valueToTree(textContent);
 
-        // Should not contain validation method names
-        assertFalse(json.contains("\"validTextContent\""), "JSON should not contain 'validTextContent' field: " + json);
-        assertFalse(json.contains("\"validImageContent\""), "JSON should not contain 'validImageContent' field: " + json);
+        // The @JsonIgnore isValidTextContent()/isValidImageContent() accessors must
+        // not appear as derived properties.
+        assertFalse(node.has("validTextContent"), "JSON should not contain 'validTextContent' field: " + node);
+        assertFalse(node.has("validImageContent"), "JSON should not contain 'validImageContent' field: " + node);
 
-        // Should contain expected fields
-        assertTrue(json.contains("\"type\""));
-        assertTrue(json.contains("\"text\""));
+        assertEquals("text", node.get("type").asText());
+        assertEquals("Hello, world!", node.get("text").asText());
 
-        // Should be able to deserialize
-        Content deserialized = mapper.readValue(json, Content.class);
-        assertEquals(textContent.type(), deserialized.type());
-        assertEquals(textContent.text(), deserialized.text());
+        Content deserialized = mapper.readValue(mapper.writeValueAsString(textContent), Content.class);
+        assertEquals(textContent, deserialized);
     }
 
     @Test
     void testContentImageDoesNotSerializeValidationMethods() throws Exception {
         Content imageContent = Content.image("base64data", "image/png");
 
-        String json = mapper.writeValueAsString(imageContent);
+        JsonNode node = mapper.valueToTree(imageContent);
 
-        // Should not contain validation method names
-        assertFalse(json.contains("\"validTextContent\""), "JSON should not contain 'validTextContent' field: " + json);
-        assertFalse(json.contains("\"validImageContent\""), "JSON should not contain 'validImageContent' field: " + json);
+        assertFalse(node.has("validTextContent"), "JSON should not contain 'validTextContent' field: " + node);
+        assertFalse(node.has("validImageContent"), "JSON should not contain 'validImageContent' field: " + node);
 
-        // Should contain expected fields
-        assertTrue(json.contains("\"type\""));
-        assertTrue(json.contains("\"data\""));
-        assertTrue(json.contains("\"mimeType\""));
+        assertEquals("image", node.get("type").asText());
+        assertEquals("base64data", node.get("data").asText());
+        assertEquals("image/png", node.get("mimeType").asText());
 
-        // Should be able to deserialize
-        Content deserialized = mapper.readValue(json, Content.class);
-        assertEquals(imageContent.type(), deserialized.type());
-        assertEquals(imageContent.data(), deserialized.data());
-        assertEquals(imageContent.mimeType(), deserialized.mimeType());
+        Content deserialized = mapper.readValue(mapper.writeValueAsString(imageContent), Content.class);
+        assertEquals(imageContent, deserialized);
     }
 }
-

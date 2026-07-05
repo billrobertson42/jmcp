@@ -123,7 +123,8 @@ class CommunicationLoggerTest {
     @Test
     void testJsonFormatting() {
         // Create request with parameters
-        String params = "{\"key\":\"value\"}";
+        String params = """
+                {"key":"value"}""";
         JsonRpcRequest request = new JsonRpcRequest("2.0", 1L, "test", params);
 
         String logEntry = logger.formatRequest(request);
@@ -142,8 +143,12 @@ class CommunicationLoggerTest {
         String logEntry = logger.formatResponse(response);
 
         assertTrue(logEntry.contains("RECEIVED"));
-        // Error details should be in the JSON
-        assertTrue(logEntry.contains("error") || logEntry.contains("Invalid Request"));
+        // The whole response is pretty-printed, so BOTH the error code and its
+        // message must appear — not merely one or the other.
+        assertTrue(logEntry.contains("Invalid Request"),
+            "error message must be logged");
+        assertTrue(logEntry.contains("-32600"),
+            "error code must be logged");
     }
 
     @Test

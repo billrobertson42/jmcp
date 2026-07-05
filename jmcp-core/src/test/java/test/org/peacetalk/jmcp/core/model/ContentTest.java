@@ -18,10 +18,16 @@ package test.org.peacetalk.jmcp.core.model;
 
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.core.model.Content;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+// NOTE: exact-key-name/field-count checks below pin the MCP wire spec (a Java
+// field rename could silently break it), NOT Jackson's ability to serialize.
 class ContentTest {
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
     void testCreateTextContent() {
@@ -68,5 +74,82 @@ class ContentTest {
         assertThrows(IllegalArgumentException.class, () ->
             new Content("  ", "text", null, null));
     }
-}
 
+    @Test
+    void testUnknownTypeRejected() {
+        // The type must be exactly "text" or "image"; anything else must be rejected
+        // by the compact constructor (catches a regressed / removed enum-style check).
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+            new Content("video", null, null, null));
+        assertTrue(ex.getMessage().contains("video"),
+            "Exception message should echo the invalid type: " + ex.getMessage());
+    }
+
+    @Test
+    void testTextContentSerializesExactShapeAndOmitsNulls() {
+        // Serialized text content must contain exactly type + text, with the image-only
+        // fields (data, mimeType) omitted because of @JsonInclude(NON_NULL).
+        Content content = Content.text("Hello, world!");
+
+        JsonNode node = mapper.valueToTree(content);
+
+        assertEquals("text", node.get("type").asText(), "type field must be the JSON key 'type'");
+        assertEquals("Hello, world!", node.get("text").asText(), "text field must be the JSON key 'text'");
+        assertFalse(node.has("data"), "null data must be omitted for text content (NON_NULL)");
+        assertFalse(node.has("mimeType"), "null mimeType must be omitted for text content (NON_NULL)");
+        assertEquals(2, node.size(), "text content should serialize exactly 2 fields");
+    }
+
+    @Test
+    void testImageContentSerializesExactShapeAndOmitsNulls() {
+        // Serialized image content must contain type + data + mimeType, with text omitted.
+        Content content = Content.image("base64data", "image/png");
+
+        JsonNode node = mapper.valueToTree(content);
+
+        assertEquals("image", node.get("type").asText());
+        assertEquals("base64data", node.get("data").asText(), "data field must be the JSON key 'data'");
+        assertEquals("image/png", node.get("mimeType").asText(), "mimeType field must be the JSON key 'mimeType'");
+        assertFalse(node.has("text"), "null text must be omitted for image content (NON_NULL)");
+        assertEquals(3, node.size(), "image content should serialize exactly 3 fields");
+    }
+
+    @Test
+    void testTextContentRoundTrip() throws Exception {
+        Content original = Content.text("round trip me");
+
+        String json = mapper.writeValueAsString(original);
+        Content deserialized = mapper.readValue(json, Content.class);
+
+        assertEquals(original, deserialized, "text content must survive a JSON round-trip unchanged");
+    }
+
+    @Test
+    void testImageContentRoundTrip() throws Exception {
+        Content original = Content.image("YWJj", "image/jpeg");
+
+        String json = mapper.writeValueAsString(original);
+        Content deserialized = mapper.readValue(json, Content.class);
+
+        assertEquals(original, deserialized, "image content must survive a JSON round-trip unchanged");
+    }
+
+    @Test
+    void testDeserializeUnknownTypeFails() {
+        // Deserializing content with an out-of-range type must be rejected by the
+        // compact constructor invoked during construction.
+        String json = """
+                {"type":"audio","text":"x"}""";
+        assertThrows(Exception.class, () -> mapper.readValue(json, Content.class),
+            "Deserializing an unknown content type must fail");
+    }
+
+    @Test
+    void testDeserializeTextTypeWithoutTextFails() {
+        // type=text but no text field violates the compact constructor's invariant.
+        String json = """
+                {"type":"text"}""";
+        assertThrows(Exception.class, () -> mapper.readValue(json, Content.class),
+            "Deserializing text content without a text field must fail");
+    }
+}
