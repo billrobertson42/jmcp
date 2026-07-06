@@ -27,6 +27,7 @@ import java.io.*;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Client-side transport for communicating with MCP servers via stdio.
@@ -45,8 +46,30 @@ public class StdioClientTransport implements AutoCloseable {
     private final String[] command;
     private final List<CommunicationListener> listeners = new CopyOnWriteArrayList<>();
 
+    /**
+     * Serializes request/response exchanges so at most one request is in flight
+     * at a time. Without this, a second concurrent sendRequest could consume the
+     * response belonging to the first (responses are correlated by read order,
+     * not asynchronously by id).
+     */
+    private final ReentrantLock exchangeLock = new ReentrantLock();
+
     public StdioClientTransport(String[] command) {
         this.command = command;
+    }
+
+    /**
+     * Create a transport over already-connected character streams instead of a
+     * spawned process. Intended for tests and in-process servers.
+     * {@link #connect()} must not be called on a transport created this way.
+     *
+     * @param responseReader stream the server writes responses to
+     * @param requestWriter  stream the server reads requests from
+     */
+    public StdioClientTransport(Reader responseReader, Writer requestWriter) {
+        this.command = null;
+        this.reader = new BufferedReader(responseReader);
+        this.writer = new PrintWriter(requestWriter, true);
     }
 
     /**
@@ -115,12 +138,13 @@ public class StdioClientTransport implements AutoCloseable {
     }
 
     /**
-     * Send a request and wait for response
+     * Send a request and wait for response.
+     * Exchanges are single-flight: concurrent callers serialize on
+     * {@link #exchangeLock}, so the write of a request and the read of its
+     * response can never interleave with another request's exchange.
      */
     public JsonRpcResponse sendRequest(String method, Object params) throws IOException {
-        if (serverProcess == null || !serverProcess.isAlive()) {
-            throw new IllegalStateException("Server process is not running");
-        }
+        ensureReady();
 
         // Create request with ID
         JsonRpcRequest request = new JsonRpcRequest(
@@ -129,78 +153,114 @@ public class StdioClientTransport implements AutoCloseable {
             method,
             params
         );
+        Object sentId = request.id();
 
-        listeners.forEach(l -> notifyRequestSent(l, request));
+        exchangeLock.lock();
+        try {
+            listeners.forEach(l -> notifyRequestSent(l, request));
 
-        // Serialize and send
-        String requestJson = MAPPER.writeValueAsString(request);
-        writer.println(requestJson);
-        writer.flush();
+            // Serialize and send
+            String requestJson = MAPPER.writeValueAsString(request);
+            writer.println(requestJson);
+            writer.flush();
 
-        // Read response - skip any non-JSON lines (e.g., debug agent output)
-        while (true) {
-            String responseLine;
-            try {
-                responseLine = reader.readLine();
-                if (responseLine == null) {
-                    IOException error = new IOException("Server closed connection");
-                    notifyError("Server closed connection", error);
-                    throw error;
+            // Read response - skip any non-JSON lines (e.g., debug agent output)
+            while (true) {
+                String responseLine;
+                try {
+                    responseLine = reader.readLine();
+                    if (responseLine == null) {
+                        IOException error = new IOException("Server closed connection");
+                        notifyError("Server closed connection", error);
+                        throw error;
+                    }
+                } catch (IOException e) {
+                    notifyError("Error reading response", e);
+                    throw e;
                 }
-            } catch (IOException e) {
-                notifyError("Error reading response", e);
-                throw e;
-            }
 
-            // Skip empty lines
-            if (responseLine.trim().isEmpty()) {
-                continue;
-            }
-
-            // Check if line looks like JSON (starts with '{')
-            String trimmed = responseLine.trim();
-            if (!trimmed.startsWith("{")) {
-                // Not JSON - likely debug agent output or other non-protocol message
-                // Check for debug agent message specifically
-                if (trimmed.startsWith("Listening for transport dt_socket")) {
-                    listeners.forEach(l -> notifyStderr(l, "[DEBUG] Server suspended - waiting for debugger to attach"));
-                    listeners.forEach(l -> notifyStderr(l, "[DEBUG] " + trimmed));
-                } else {
-                    // Log other non-JSON output to stderr listeners
-                    String nonJsonLine = responseLine;
-                    listeners.forEach(l -> notifyStderr(l, "[stdout] " + nonJsonLine));
+                // Skip empty lines
+                if (responseLine.trim().isEmpty()) {
+                    continue;
                 }
-                continue;
-            }
 
-            // Try to parse as JSON-RPC response
-            try {
-                JsonRpcResponse response = MAPPER.readValue(responseLine, JsonRpcResponse.class);
-                listeners.forEach(l -> notifyResponseReceived(l, response));
-                return response;
-            } catch (StreamReadException jack) {
-                // JSON parse error - this might be malformed JSON, log and throw
-                if (jack.getMessage().startsWith("Unrecognized token")) {
-                    notifyError("Error parsing response: '" + responseLine + "'", jack);
-                } else {
-                    notifyError("Failed to parse response", jack);
+                // Check if line looks like JSON (starts with '{')
+                String trimmed = responseLine.trim();
+                if (!trimmed.startsWith("{")) {
+                    // Not JSON - likely debug agent output or other non-protocol message
+                    // Check for debug agent message specifically
+                    if (trimmed.startsWith("Listening for transport dt_socket")) {
+                        listeners.forEach(l -> notifyStderr(l, "[DEBUG] Server suspended - waiting for debugger to attach"));
+                        listeners.forEach(l -> notifyStderr(l, "[DEBUG] " + trimmed));
+                    } else {
+                        // Log other non-JSON output to stderr listeners
+                        String nonJsonLine = responseLine;
+                        listeners.forEach(l -> notifyStderr(l, "[stdout] " + nonJsonLine));
+                    }
+                    continue;
                 }
-                throw jack;
-            } catch (Exception e) {
-                notifyError("Failed to parse response", e);
-                throw new IOException("Failed to parse response: " + e.getMessage(), e);
+
+                // Try to parse as JSON-RPC response
+                try {
+                    JsonRpcResponse response = MAPPER.readValue(responseLine, JsonRpcResponse.class);
+                    if (!idMatches(sentId, response.id())) {
+                        // Stale response from a previously abandoned request -
+                        // report it and keep reading until the matching id (or EOF)
+                        notifyError("Discarding response with id " + response.id()
+                                + " that does not match request id " + sentId
+                                + " (stale response from an earlier request?)", null);
+                        continue;
+                    }
+                    listeners.forEach(l -> notifyResponseReceived(l, response));
+                    return response;
+                } catch (StreamReadException jack) {
+                    // JSON parse error - this might be malformed JSON, log and throw
+                    if (jack.getMessage().startsWith("Unrecognized token")) {
+                        notifyError("Error parsing response: '" + responseLine + "'", jack);
+                    } else {
+                        notifyError("Failed to parse response", jack);
+                    }
+                    throw jack;
+                } catch (Exception e) {
+                    notifyError("Failed to parse response", e);
+                    throw new IOException("Failed to parse response: " + e.getMessage(), e);
+                }
             }
+        } finally {
+            exchangeLock.unlock();
+        }
+    }
+
+    /**
+     * Compare the id of the request just sent with the id of a received response.
+     * Jackson deserializes JSON-RPC ids into whatever fits ({@code Integer},
+     * {@code Long}, {@code String}), while the transport sends {@code Long} ids,
+     * so a plain {@code equals} would treat {@code 7} (Integer) and {@code 7L}
+     * as different ids. Compare by string value instead.
+     */
+    private static boolean idMatches(Object sentId, Object responseId) {
+        return responseId != null && String.valueOf(sentId).equals(String.valueOf(responseId));
+    }
+
+    /**
+     * Verify the transport can send: streams are set up and, if this transport
+     * launched a process, that process is still alive.
+     */
+    private void ensureReady() {
+        boolean processDead = serverProcess != null && !serverProcess.isAlive();
+        if (writer == null || reader == null || processDead) {
+            throw new IllegalStateException("Server process is not running");
         }
     }
 
     /**
      * Send a notification (request without id - no response expected).
      * Notifications do not wait for a response per JSON-RPC 2.0 spec.
+     * Takes the exchange lock so a notification cannot be injected into the
+     * middle of an in-flight request/response exchange.
      */
     public void sendNotification(String method, Object params) throws IOException {
-        if (serverProcess == null || !serverProcess.isAlive()) {
-            throw new IllegalStateException("Server process is not running");
-        }
+        ensureReady();
 
         // Create notification (no id)
         JsonRpcRequest notification = new JsonRpcRequest(
@@ -210,12 +270,17 @@ public class StdioClientTransport implements AutoCloseable {
             params
         );
 
-        listeners.forEach(l -> notifyRequestSent(l, notification));
+        exchangeLock.lock();
+        try {
+            listeners.forEach(l -> notifyRequestSent(l, notification));
 
-        // Serialize and send
-        String notificationJson = MAPPER.writeValueAsString(notification);
-        writer.println(notificationJson);
-        writer.flush();
+            // Serialize and send
+            String notificationJson = MAPPER.writeValueAsString(notification);
+            writer.println(notificationJson);
+            writer.flush();
+        } finally {
+            exchangeLock.unlock();
+        }
 
         // No response expected for notifications
     }
