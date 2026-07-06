@@ -23,7 +23,6 @@ import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.scene.text.TextFlow;
 
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -78,7 +77,10 @@ public class NavigableResourceView extends VBox {
     }
 
     /**
-     * Display content with navigable URI links.
+     * Display content with navigable URI links. The content is parsed as JSON
+     * and rendered from the tree; resource-URI string values (in objects or
+     * arrays) become clickable hyperlinks. Non-JSON content is displayed as
+     * plain text.
      *
      * @param content The JSON content to display
      */
@@ -89,57 +91,31 @@ public class NavigableResourceView extends VBox {
             return;
         }
 
-        // Find all navigable URIs
-        List<NavigableUriDetector.NavigableUri> uris = NavigableUriDetector.findNavigableUris(content);
-
-        if (uris.isEmpty()) {
-            // No URIs - just display as plain text
-            textFlow.getChildren().add(createText(content));
-            return;
-        }
-
-        // Build text flow with hyperlinks for URIs
-        int lastEnd = 0;
-        for (NavigableUriDetector.NavigableUri uri : uris) {
-            // Add text before this URI
-            if (uri.startIndex() > lastEnd) {
-                String before = content.substring(lastEnd, uri.startIndex());
-                textFlow.getChildren().add(createText(before));
+        for (JsonSegmentRenderer.Segment segment : JsonSegmentRenderer.render(content)) {
+            if (segment.isLink()) {
+                textFlow.getChildren().add(createLink(segment.uri()));
+            } else {
+                textFlow.getChildren().add(createText(segment.text()));
             }
-
-            // Add the field name part (before the URI value)
-            String fullMatch = content.substring(uri.startIndex(), uri.endIndex());
-            int uriValueStart = fullMatch.lastIndexOf('"' + uri.uri() + '"');
-            if (uriValueStart > 0) {
-                String fieldPart = fullMatch.substring(0, uriValueStart + 1); // Include opening quote
-                textFlow.getChildren().add(createText(fieldPart));
-            }
-
-            // Add the URI as a hyperlink
-            Hyperlink link = new Hyperlink(uri.uri());
-            if (font != null) {
-                link.setFont(font);
-            }
-            link.setStyle("-fx-padding: 0; -fx-border-width: 0;");
-            link.setOnAction(e -> {
-                if (onNavigate != null) {
-                    onNavigate.accept(uri.uri());
-                }
-            });
-            link.setTooltip(new javafx.scene.control.Tooltip("Navigate to: " + uri.uri()));
-            textFlow.getChildren().add(link);
-
-            // Add closing quote
-            textFlow.getChildren().add(createText("\""));
-
-            lastEnd = uri.endIndex();
         }
+    }
 
-        // Add remaining text after last URI
-        if (lastEnd < content.length()) {
-            String remaining = content.substring(lastEnd);
-            textFlow.getChildren().add(createText(remaining));
+    /**
+     * Create a hyperlink node that navigates to the given URI when clicked.
+     */
+    private Hyperlink createLink(String uri) {
+        Hyperlink link = new Hyperlink(uri);
+        if (font != null) {
+            link.setFont(font);
         }
+        link.setStyle("-fx-padding: 0; -fx-border-width: 0;");
+        link.setOnAction(e -> {
+            if (onNavigate != null) {
+                onNavigate.accept(uri);
+            }
+        });
+        link.setTooltip(new javafx.scene.control.Tooltip("Navigate to: " + uri));
+        return link;
     }
 
     /**

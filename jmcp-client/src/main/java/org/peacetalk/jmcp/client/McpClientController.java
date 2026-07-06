@@ -95,7 +95,7 @@ public class McpClientController {
 
     // State
     private Tool selectedTool;
-    private Map<String, TextField> argumentFields;
+    private Map<String, ToolArgumentFormBuilder.FieldInput> argumentFields;
     private ResourceDescriptor selectedResource;
 
     @FXML
@@ -604,11 +604,18 @@ public class McpClientController {
             return;
         }
 
+        // Collect and coerce arguments before starting execution so that
+        // invalid input is reported immediately and nothing is executed
+        Map<String, Object> arguments;
+        try {
+            arguments = formBuilder.collectArguments(argumentFields, valueParser);
+        } catch (IllegalArgumentException e) {
+            showError(e.getMessage());
+            return;
+        }
+
         executeButton.setDisable(true);
         resultArea.setText("Executing...");
-
-        // Collect arguments
-        Map<String, Object> arguments = formBuilder.collectArguments(argumentFields, valueParser);
 
         // Execute in background (daemon thread)
         Thread executeThread = new Thread(() -> {
