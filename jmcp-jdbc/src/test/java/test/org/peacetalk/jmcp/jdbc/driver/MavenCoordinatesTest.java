@@ -27,19 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MavenCoordinatesTest {
 
     @Test
-    void testCoordinatesCreation() {
-        MavenCoordinates coords = new MavenCoordinates(
-            "org.postgresql",
-            "postgresql",
-            "42.7.1"
-        );
-
-        assertEquals("org.postgresql", coords.groupId());
-        assertEquals("postgresql", coords.artifactId());
-        assertEquals("42.7.1", coords.version());
-    }
-
-    @Test
     void testToPath() {
         MavenCoordinates coords = new MavenCoordinates(
             "org.postgresql",

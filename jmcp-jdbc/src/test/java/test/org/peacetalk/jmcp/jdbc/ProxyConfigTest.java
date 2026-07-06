@@ -1,12 +1,19 @@
 package test.org.peacetalk.jmcp.jdbc;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.peacetalk.jmcp.jdbc.ProxyConfig;
 
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.URI;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,96 +25,99 @@ class ProxyConfigTest {
     }
 
     // ------------------------------------------------------------------
-    // getProxyHost
+    // envProxyAddress — parsing HTTP_PROXY/HTTPS_PROXY into an address
     // ------------------------------------------------------------------
 
+    // Mutants killed: wrong regex group for host/port, default port changed from 80,
+    // dropped HTTPS_PROXY fallback, dropped lowercase env-var lookup, regex accepting
+    // non-http(s) schemes or garbage values.
     @ParameterizedTest(name = "[{index}] {0}")
-    @MethodSource("proxyHostCases")
-    void getProxyHost(String description, Map<String, String> sys, Map<String, String> env, String expected) {
-        assertEquals(expected, config(sys, env).getProxyHost());
+    @MethodSource("envProxyAddressCases")
+    void envProxyAddress(String description, Map<String, String> env, InetSocketAddress expected) {
+        Optional<InetSocketAddress> actual = config(Map.of(), env).envProxyAddress();
+        assertEquals(Optional.ofNullable(expected), actual, description);
     }
 
-    static Stream<Arguments> proxyHostCases() {
+    static Stream<Arguments> envProxyAddressCases() {
         return Stream.of(
-            sysEnvExpected("system property",
-                Map.of("http.proxyHost", "proxy.example.com"), Map.of(),
-                "proxy.example.com"),
-            sysEnvExpected("HTTP_PROXY uppercase with port",
-                Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com:8080"),
-                "proxy.example.com"),
-            sysEnvExpected("HTTP_PROXY uppercase without port",
-                Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com"),
-                "proxy.example.com"),
-            sysEnvExpected("http_proxy lowercase with port",
-                Map.of(), Map.of("http_proxy", "http://proxy.example.com:8080"),
-                "proxy.example.com"),
-            sysEnvExpected("http_proxy lowercase without port",
-                Map.of(), Map.of("http_proxy", "http://proxy.example.com"),
-                "proxy.example.com"),
-            sysEnvExpected("HTTPS_PROXY uppercase fallback",
-                Map.of(), Map.of("HTTPS_PROXY", "https://secure.example.com:443"),
-                "secure.example.com"),
-            sysEnvExpected("https_proxy lowercase fallback",
-                Map.of(), Map.of("https_proxy", "https://secure.example.com:443"),
-                "secure.example.com"),
-            sysEnvExpected("system property overrides HTTP_PROXY",
-                Map.of("http.proxyHost", "sys.example.com"),
-                Map.of("HTTP_PROXY", "http://env.example.com:8080"),
-                "sys.example.com"),
-            sysEnvExpected("nothing configured",
-                Map.of(), Map.of(), null),
-            sysEnvExpected("HTTP_PROXY not a URL",
-                Map.of(), Map.of("HTTP_PROXY", "not-a-url"), null),
-            sysEnvExpected("HTTP_PROXY wrong scheme",
-                Map.of(), Map.of("HTTP_PROXY", "ftp://proxy.example.com:21"), null),
-            sysEnvExpected("HTTP_PROXY empty string",
-                Map.of(), Map.of("HTTP_PROXY", ""), null)
+            Arguments.of("HTTP_PROXY uppercase with port",
+                Map.of("HTTP_PROXY", "http://proxy.example.com:8080"),
+                addr("proxy.example.com", 8080)),
+            Arguments.of("HTTP_PROXY without port defaults to 80",
+                Map.of("HTTP_PROXY", "http://proxy.example.com"),
+                addr("proxy.example.com", 80)),
+            Arguments.of("HTTP_PROXY with trailing slash",
+                Map.of("HTTP_PROXY", "http://proxy.example.com:8080/"),
+                addr("proxy.example.com", 8080)),
+            Arguments.of("http_proxy lowercase with port",
+                Map.of("http_proxy", "http://proxy.example.com:8080"),
+                addr("proxy.example.com", 8080)),
+            Arguments.of("HTTPS_PROXY uppercase fallback",
+                Map.of("HTTPS_PROXY", "https://secure.example.com:443"),
+                addr("secure.example.com", 443)),
+            Arguments.of("https_proxy lowercase fallback",
+                Map.of("https_proxy", "https://secure.example.com:443"),
+                addr("secure.example.com", 443)),
+            Arguments.of("HTTP_PROXY preferred over HTTPS_PROXY",
+                mapOf("HTTP_PROXY", "http://http.example.com:80",
+                      "HTTPS_PROXY", "https://https.example.com:443"),
+                addr("http.example.com", 80)),
+            Arguments.of("nothing configured",
+                Map.of(), null),
+            Arguments.of("HTTP_PROXY not a URL",
+                Map.of("HTTP_PROXY", "not-a-url"), null),
+            Arguments.of("HTTP_PROXY wrong scheme",
+                Map.of("HTTP_PROXY", "ftp://proxy.example.com:21"), null),
+            Arguments.of("HTTP_PROXY empty string",
+                Map.of("HTTP_PROXY", ""), null),
+            Arguments.of("HTTP_PROXY non-numeric port",
+                Map.of("HTTP_PROXY", "http://proxy.example.com:abc"), null)
         );
     }
 
     // ------------------------------------------------------------------
-    // getProxyPort
+    // proxySelector — what gets installed on the HttpClient
     // ------------------------------------------------------------------
 
-    @ParameterizedTest(name = "[{index}] {0}")
-    @MethodSource("proxyPortCases")
-    void getProxyPort(String description, Map<String, String> sys, Map<String, String> env, String expected) {
-        assertEquals(expected, config(sys, env).getProxyPort());
+    @Test
+    void proxySelectorEmptyWhenSystemPropertySet() {
+        // Mutant killed: removing the http.proxyHost system-property check, which
+        // would wrongly override the JDK default selector with the env-var proxy.
+        Optional<ProxySelector> selector = config(
+            Map.of("http.proxyHost", "sys.example.com"),
+            Map.of("HTTP_PROXY", "http://env.example.com:8080")
+        ).proxySelector();
+        assertEquals(Optional.empty(), selector,
+            "system-property proxies must be left to the JDK default selector");
     }
 
-    static Stream<Arguments> proxyPortCases() {
-        return Stream.of(
-            sysEnvExpected("system property",
-                Map.of("http.proxyPort", "3128"), Map.of(), "3128"),
-            sysEnvExpected("HTTP_PROXY uppercase",
-                Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com:8080"), "8080"),
-            sysEnvExpected("http_proxy lowercase",
-                Map.of(), Map.of("http_proxy", "http://proxy.example.com:8080"), "8080"),
-            sysEnvExpected("HTTPS_PROXY uppercase fallback",
-                Map.of(), Map.of("HTTPS_PROXY", "https://secure.example.com:443"), "443"),
-            sysEnvExpected("https_proxy lowercase fallback",
-                Map.of(), Map.of("https_proxy", "https://secure.example.com:443"), "443"),
-            sysEnvExpected("system property overrides HTTP_PROXY",
-                Map.of("http.proxyPort", "9999"),
-                Map.of("HTTP_PROXY", "http://env.example.com:8080"),
-                "9999"),
-            sysEnvExpected("nothing configured",
-                Map.of(), Map.of(), null),
-            sysEnvExpected("HTTP_PROXY no port",
-                Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com"), null),
-            sysEnvExpected("HTTP_PROXY non-numeric port",
-                Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com:abc"), null),
-            sysEnvExpected("HTTP_PROXY not a URL",
-                Map.of(), Map.of("HTTP_PROXY", "not-a-url"), null),
-            sysEnvExpected("HTTP_PROXY wrong scheme",
-                Map.of(), Map.of("HTTP_PROXY", "ftp://proxy.example.com:21"), null)
-        );
+    @Test
+    void proxySelectorEmptyWhenNothingConfigured() {
+        // Mutant killed: returning a non-empty selector when no proxy is configured.
+        assertEquals(Optional.empty(), config(Map.of(), Map.of()).proxySelector());
+    }
+
+    @Test
+    void proxySelectorRoutesThroughEnvVarProxy() {
+        // Mutant killed: env-var address not passed to ProxySelector.of (wrong
+        // host/port, or empty returned despite HTTP_PROXY being set).
+        ProxySelector selector = config(Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com:8080"))
+            .proxySelector()
+            .orElseThrow(() -> new AssertionError("HTTP_PROXY is set; selector must be present"));
+
+        List<Proxy> proxies = selector.select(URI.create("https://repo1.maven.org/maven2/a/b/c.jar"));
+        assertEquals(1, proxies.size(), "exactly one proxy expected");
+        assertEquals(Proxy.Type.HTTP, proxies.get(0).type());
+        assertEquals(addr("proxy.example.com", 8080), proxies.get(0).address(),
+            "selector must route through the env-var proxy address");
     }
 
     // ------------------------------------------------------------------
     // getHttpProxyEnvVariable
     // ------------------------------------------------------------------
 
+    // Mutants killed: HTTPS_PROXY fallback removed, precedence between the two
+    // variables flipped.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("httpProxyEnvCases")
     void getHttpProxyEnvVariable(String description, Map<String, String> env, String expected) {
@@ -140,6 +150,8 @@ class ProxyConfigTest {
     // getenv
     // ------------------------------------------------------------------
 
+    // Mutants killed: dropping the upper-case or lower-case retry, looking the
+    // name up verbatim instead of case-normalized.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("getenvCases")
     void getenv(String description, String lookupName, Map<String, String> env, String expected) {
@@ -169,9 +181,8 @@ class ProxyConfigTest {
     // helpers
     // ------------------------------------------------------------------
 
-    private static Arguments sysEnvExpected(String name, Map<String, String> sys,
-                                             Map<String, String> env, String expected) {
-        return Arguments.of(name, sys, env, expected);
+    private static InetSocketAddress addr(String host, int port) {
+        return InetSocketAddress.createUnresolved(host, port);
     }
 
     private static Map<String, String> mapOf(String... pairs) {

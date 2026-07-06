@@ -1,18 +1,35 @@
 package org.peacetalk.jmcp.jdbc;
 
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Provides HTTP proxy configuration by resolving proxy settings from Java system
- * properties ({@code http.proxyHost}, {@code http.proxyPort}) or, as a fallback,
- * from the {@code HTTP_PROXY} / {@code HTTPS_PROXY} environment variables.
+ * Supplies the HTTP proxy override for {@code java.net.http.HttpClient}.
+ *
+ * <p>The JDK's default {@link ProxySelector} (used by {@code HttpClient} when no
+ * explicit selector is set) already honors the {@code http.proxyHost} /
+ * {@code http.proxyPort} system properties. This class therefore only covers what
+ * the JDK does not: the {@code HTTP_PROXY} / {@code HTTPS_PROXY} (and lower-case)
+ * environment-variable convention.
  *
  * <p>The lookup functions for system properties and environment variables are
- * injectable, making this class easy to testable
+ * injectable, making this class easy to test.
  */
 public class ProxyConfig {
+
+    /**
+     * Matches proxy env-var values of the form {@code http://host[:port][/]} or
+     * {@code https://host[:port][/]}. Group 1 is the host, group 2 the optional port.
+     */
+    private static final Pattern ENV_PROXY_URL =
+        Pattern.compile("^https?://([^:/\\s]+)(?::([0-9]+))?/?$");
+
+    /** Port assumed when the proxy env var omits one. */
+    private static final int DEFAULT_PROXY_PORT = 80;
 
     private final Function<String, String> sys;
     private final Function<String, String> env;
@@ -30,65 +47,52 @@ public class ProxyConfig {
     }
 
     /**
-     * Creates a {@code ProxyConfig} using the standard JVM system properties.
-     * This is for normal use.
-     *
+     * Creates a {@code ProxyConfig} using the standard JVM system properties
      * ({@link System#getProperty}) and environment variables ({@link System#getenv}).
+     * This is for normal use.
      */
     public ProxyConfig() {
         this(System::getProperty, System::getenv);
     }
 
     /**
-     * Returns the proxy host to use for HTTP connections.
+     * Returns the {@link ProxySelector} to install on an {@code HttpClient}, if any.
      *
-     * <p>Resolution order:
-     * <ol>
-     *   <li>Java system property {@code http.proxyHost}</li>
-     *   <li>Host portion parsed from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
-     *       environment variable (e.g. {@code http://proxy.example.com:8080})</li>
-     * </ol>
+     * <p>Empty when the {@code http.proxyHost} system property is set (the client's
+     * default selector already honors it) and when no proxy is configured at all —
+     * in both cases the caller should leave the {@code HttpClient} default in place.
+     * Present only when the proxy comes from the {@code HTTP_PROXY} /
+     * {@code HTTPS_PROXY} environment variables, which the JDK ignores.
      *
-     * @return the proxy host, or {@code null} if no proxy host is configured
+     * @return a selector for the env-var-configured proxy, or empty
      */
-    public String getProxyHost() {
-        String proxyHost = sys.apply("http.proxyHost");
-        if (proxyHost == null) {
-            String fromEnv = getHttpProxyEnvVariable();
-            if (fromEnv != null) {
-                Matcher matcher = Pattern.compile("^https?://([^:]+).*$").matcher(fromEnv);
-                if (matcher.matches()) {
-                    proxyHost = matcher.group(1);
-                }
-            }
+    public Optional<ProxySelector> proxySelector() {
+        if (sys.apply("http.proxyHost") != null) {
+            return Optional.empty();
         }
-        return proxyHost;
+        return envProxyAddress().map(ProxySelector::of);
     }
 
     /**
-     * Returns the proxy port to use for HTTP connections.
+     * Parses the proxy address from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
+     * environment variables (upper- or lower-case). A value without an explicit
+     * port defaults to port {@value #DEFAULT_PROXY_PORT}; a value that is not an
+     * {@code http(s)://host[:port]} URL yields empty.
      *
-     * <p>Resolution order:
-     * <ol>
-     *   <li>Java system property {@code http.proxyPort}</li>
-     *   <li>Port portion parsed from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
-     *       environment variable (e.g. {@code http://proxy.example.com:8080})</li>
-     * </ol>
-     *
-     * @return the proxy port as a string, or {@code null} if no proxy port is configured
+     * @return the unresolved proxy address, or empty if none is configured
      */
-    public String getProxyPort() {
-        String proxyPort = sys.apply("http.proxyPort");
-        if (proxyPort == null) {
-            String fromEnv = getHttpProxyEnvVariable();
-            if (fromEnv != null) {
-                Matcher matcher = Pattern.compile("^https?://[^:]+:([0-9]+)$").matcher(fromEnv);
-                if (matcher.matches()) {
-                    proxyPort = matcher.group(1);
-                }
-            }
+    public Optional<InetSocketAddress> envProxyAddress() {
+        String fromEnv = getHttpProxyEnvVariable();
+        if (fromEnv == null) {
+            return Optional.empty();
         }
-        return proxyPort;
+        Matcher matcher = ENV_PROXY_URL.matcher(fromEnv);
+        if (!matcher.matches()) {
+            return Optional.empty();
+        }
+        String host = matcher.group(1);
+        int port = matcher.group(2) != null ? Integer.parseInt(matcher.group(2)) : DEFAULT_PROXY_PORT;
+        return Optional.of(InetSocketAddress.createUnresolved(host, port));
     }
 
     /**
@@ -99,11 +103,11 @@ public class ProxyConfig {
      *         variable is set
      */
     public String getHttpProxyEnvVariable() {
-        String http_proxy =  getenv("HTTP_PROXY");
-        if (http_proxy == null) {
-            http_proxy = getenv("HTTPS_PROXY");
+        String httpProxy = getenv("HTTP_PROXY");
+        if (httpProxy == null) {
+            httpProxy = getenv("HTTPS_PROXY");
         }
-        return http_proxy;
+        return httpProxy;
     }
 
     /**

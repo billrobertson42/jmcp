@@ -22,13 +22,24 @@ import org.peacetalk.jmcp.jdbc.ProxyConfig;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.*;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Driver;
+import java.time.Duration;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Manages dynamic loading of JDBC drivers from Maven Central
@@ -50,15 +61,45 @@ public class JdbcDriverClassManager {
         Map.entry("sqlite", new MavenCoordinates("org.xerial", "sqlite-jdbc", "3.51.1.0"))
     );
 
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration JAR_REQUEST_TIMEOUT = Duration.ofSeconds(120);
+    private static final Duration CHECKSUM_REQUEST_TIMEOUT = Duration.ofSeconds(30);
+
+    /**
+     * Leading 40-hex-char token of a Maven {@code .sha1} file, tolerating leading
+     * whitespace and trailing {@code "  filename.jar"} decorations. The negative
+     * lookahead rejects longer hex runs (e.g. a SHA-256 served by mistake).
+     */
+    private static final Pattern SHA1_TOKEN =
+        Pattern.compile("^\\s*([0-9a-fA-F]{40})(?![0-9a-fA-F])");
+
     private final Path driverCacheDir;
+    private final String repoBaseUrl;
+    private final HttpClient httpClient;
     private final Map<String, DriverClassLoader> loadedDrivers;
-    private final ProxyConfig proxyConfig;
 
     public JdbcDriverClassManager(Path driverCacheDir) throws IOException {
+        this(driverCacheDir, MavenCoordinates.MAVEN_CENTRAL_BASE);
+    }
+
+    /**
+     * Creates a manager that downloads from an alternate repository base URL.
+     * Exists so tests can point at a local HTTP server instead of Maven Central.
+     */
+    public JdbcDriverClassManager(Path driverCacheDir, String repoBaseUrl) throws IOException {
         this.driverCacheDir = driverCacheDir;
+        this.repoBaseUrl = repoBaseUrl.endsWith("/") ? repoBaseUrl : repoBaseUrl + "/";
         this.loadedDrivers = new ConcurrentHashMap<>();
-        this.proxyConfig = new ProxyConfig();
         Files.createDirectories(driverCacheDir);
+
+        HttpClient.Builder builder = HttpClient.newBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .followRedirects(HttpClient.Redirect.NORMAL);
+        // If http.proxyHost/http.proxyPort system properties are set, the client's
+        // default ProxySelector.getDefault() already honors them; ProxyConfig only
+        // supplies an override for the HTTP_PROXY/HTTPS_PROXY env-var convention.
+        new ProxyConfig().proxySelector().ifPresent(builder::proxy);
+        this.httpClient = builder.build();
     }
 
     /**
@@ -98,9 +139,14 @@ public class JdbcDriverClassManager {
     }
 
     /**
-     * Download driver JAR from Maven Central if not cached
+     * Download driver JAR from Maven Central if not cached.
+     *
+     * <p>The jar is downloaded to a temp file in the cache directory, its SHA-1 is
+     * verified against the repository's {@code .sha1} companion file, and only then
+     * is it atomically moved to its final cache path — so a partial or tampered
+     * download is never cached.
      */
-    private Path downloadDriver(MavenCoordinates coordinates) throws IOException {
+    private Path downloadDriver(MavenCoordinates coordinates) throws IOException, InterruptedException {
         String fileName = coordinates.artifactId() + "-" + coordinates.version() + ".jar";
         Path targetPath = driverCacheDir.resolve(fileName);
 
@@ -108,31 +154,99 @@ public class JdbcDriverClassManager {
             return targetPath;
         }
 
-        String url = coordinates.getMavenCentralUrl();
-        LOG.info("Downloading driver from: {}", url);
+        String jarUrl = repoBaseUrl + coordinates.toPath();
+        LOG.info("Downloading driver from: {}", jarUrl);
 
-        URLConnection conn = null;
+        Path tempFile = Files.createTempFile(driverCacheDir, fileName + ".", ".part");
+        try {
+            download(jarUrl, tempFile);
 
-        String proxyHost = proxyConfig.getProxyHost();
-        if(proxyHost != null ) {
-            String proxyPortStr = proxyConfig.getProxyPort();
-            int proxyPort = proxyPortStr != null ? Integer.parseInt(proxyPortStr) : 80;
-            InetSocketAddress proxyAddress = new InetSocketAddress(proxyHost, proxyPort);
-            Proxy proxy = new Proxy(Proxy.Type.HTTP, proxyAddress);
-            conn = new URL(url).openConnection(proxy);
-        }
-        else {
-            conn = new URL(url).openConnection();
-        }
+            String expectedSha1 = fetchExpectedSha1(jarUrl + ".sha1");
+            String actualSha1 = sha1Hex(tempFile);
+            if (!expectedSha1.equalsIgnoreCase(actualSha1)) {
+                throw new IOException("SHA-1 mismatch for " + jarUrl
+                    + ": repository says " + expectedSha1
+                    + " but downloaded file has " + actualSha1);
+            }
 
-        try (InputStream in = conn.getInputStream()) {
-            Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(tempFile, targetPath, StandardCopyOption.ATOMIC_MOVE);
+        } finally {
+            // No-op after a successful move; removes partial/unverified data otherwise.
+            Files.deleteIfExists(tempFile);
         }
 
         LOG.info("Driver downloaded to: {}", targetPath);
         return targetPath;
     }
 
+    /**
+     * Download {@code url} into {@code dest}, failing on any non-200 status.
+     */
+    private void download(String url, Path dest) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+            .timeout(JAR_REQUEST_TIMEOUT)
+            .GET()
+            .build();
+        HttpResponse<Path> response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(dest));
+        if (response.statusCode() != 200) {
+            throw new IOException("HTTP " + response.statusCode() + " downloading " + url);
+        }
+    }
+
+    /**
+     * Fetch the repository's {@code .sha1} companion file and extract the digest.
+     * Maven Central always publishes one, so any failure here fails the download.
+     */
+    private String fetchExpectedSha1(String checksumUrl) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(checksumUrl))
+            .timeout(CHECKSUM_REQUEST_TIMEOUT)
+            .GET()
+            .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IOException("HTTP " + response.statusCode() + " fetching checksum " + checksumUrl);
+        }
+        return parseSha1(response.body(), checksumUrl);
+    }
+
+    /**
+     * Extract the leading 40-hex-char SHA-1 token from a {@code .sha1} file body
+     * ({@code "<hex>"}, {@code "<hex>  filename.jar"}, trailing whitespace, and
+     * upper- or lower-case hex are all accepted).
+     *
+     * @throws IOException if the body contains no SHA-1 digest
+     */
+    public static String parseSha1(String body, String source) throws IOException {
+        if (body != null) {
+            Matcher matcher = SHA1_TOKEN.matcher(body);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        String shown = body == null ? "null"
+            : body.length() > 80 ? body.substring(0, 80) + "..." : body;
+        throw new IOException("No SHA-1 digest found in checksum from " + source + ": '" + shown + "'");
+    }
+
+    /**
+     * Compute the lower-case hex SHA-1 digest of a file.
+     */
+    public static String sha1Hex(Path file) throws IOException {
+        MessageDigest digest;
+        try {
+            digest = MessageDigest.getInstance("SHA-1");
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-1 MessageDigest unavailable", e);
+        }
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
 
     /**
      * Unload a driver and close its classloader

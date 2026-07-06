@@ -24,12 +24,15 @@ public record MavenCoordinates(
     String artifactId,
     String version
 ) {
+    /** Base URL of the Maven Central repository. */
+    public static final String MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2/";
+
     public String toPath() {
         return groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
     }
 
     public String getMavenCentralUrl() {
-        return "https://repo1.maven.org/maven2/" + toPath();
+        return MAVEN_CENTRAL_BASE + toPath();
     }
 
     @Override
