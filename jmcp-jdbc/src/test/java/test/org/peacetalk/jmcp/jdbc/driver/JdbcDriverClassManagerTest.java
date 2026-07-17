@@ -24,8 +24,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.peacetalk.jmcp.jdbc.driver.DriverArtifact;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -139,10 +141,27 @@ class JdbcDriverClassManagerTest {
         // Mutant killed: KNOWN_DRIVERS entry for "h2" pointing at the wrong
         // groupId/artifactId, or the lookup ignoring its key.
         var manager = new JdbcDriverClassManager(cacheDir);
-        List<MavenCoordinates> h2 = manager.getKnownDriver("h2");
+        List<DriverArtifact> h2 = manager.getKnownDriver("h2");
         assertEquals(1, h2.size(), "h2 is a single-jar driver");
-        assertEquals("com.h2database", h2.get(0).groupId());
-        assertEquals("h2", h2.get(0).artifactId());
+        assertEquals("com.h2database", h2.get(0).coordinates().groupId());
+        assertEquals("h2", h2.get(0).coordinates().artifactId());
+    }
+
+    @Test
+    void everyShippedDriverArtifactIsPinned() throws Exception {
+        // Mutant killed: a pin dropped from (or never added to) an entry in the
+        // shipped known_drivers.json - the whole point of pinning is that every
+        // artifact the server can download out of the box is covered. When
+        // adding a new driver, run scripts/update-driver-pins.sh.
+        var manager = new JdbcDriverClassManager(cacheDir);
+        for (String type : List.of("postgresql", "mysql", "mariadb", "oracle",
+                "sqlserver", "h2", "sqlite")) {
+            for (DriverArtifact artifact : manager.getKnownDriver(type)) {
+                assertNotNull(artifact.sha256(),
+                    "artifact " + artifact.coordinates() + " of type '" + type
+                        + "' must carry a sha256 pin");
+            }
+        }
     }
 
     @Test
@@ -155,7 +174,7 @@ class JdbcDriverClassManagerTest {
         var manager = new JdbcDriverClassManager(cacheDir);
         for (String type : List.of("postgresql", "mysql", "mariadb", "oracle",
                 "sqlserver", "h2", "sqlite")) {
-            List<MavenCoordinates> artifacts = manager.getKnownDriver(type);
+            List<DriverArtifact> artifacts = manager.getKnownDriver(type);
             assertFalse(artifacts.isEmpty(), "type '" + type + "' must define artifacts");
         }
     }
@@ -166,10 +185,10 @@ class JdbcDriverClassManagerTest {
         // entry - Azure AD auth needs msal4j on the driver's classpath, and
         // the driver jar must stay first (it is what loadDriverClass resolves).
         var manager = new JdbcDriverClassManager(cacheDir);
-        List<MavenCoordinates> sqlserver = manager.getKnownDriver("sqlserver");
-        assertEquals("mssql-jdbc", sqlserver.get(0).artifactId(),
+        List<DriverArtifact> sqlserver = manager.getKnownDriver("sqlserver");
+        assertEquals("mssql-jdbc", sqlserver.get(0).coordinates().artifactId(),
             "the JDBC driver must be the first artifact");
-        assertTrue(sqlserver.stream().anyMatch(c -> c.artifactId().equals("msal4j")),
+        assertTrue(sqlserver.stream().anyMatch(a -> a.coordinates().artifactId().equals("msal4j")),
             "sqlserver must ship msal4j for Azure AD authentication: " + sqlserver);
     }
 
@@ -366,6 +385,113 @@ class JdbcDriverClassManagerTest {
     }
 
     // ------------------------------------------------------------------
+    // sha256 pins
+    // ------------------------------------------------------------------
+
+    @Test
+    void correctPinVerifiesWithoutFetchingRepositoryChecksum() throws Exception {
+        // Mutant killed: ignoring the pin and falling back to the .sha1 flow -
+        // the fake repo serves a valid .sha1, so the load would still succeed,
+        // but the .sha1 request assertion fails. The pin makes the repository
+        // checksum irrelevant for this artifact.
+        serveJarsWithValidChecksums();
+        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var pinned = List.of(new DriverArtifact(FAKE_DRIVER, sha256Of(JAR_BYTES)));
+        try {
+            manager.loadDriverArtifacts(pinned);
+            assertArrayEquals(JAR_BYTES, Files.readAllBytes(cacheDir.resolve("fake-driver-1.0.jar")),
+                "pinned artifact must download and cache normally");
+            assertFalse(requestedPaths.contains("/repo/" + FAKE_DRIVER.toPath() + ".sha1"),
+                "a pinned artifact must not fetch the repository checksum: " + requestedPaths);
+        } finally {
+            manager.unloadDriverArtifacts(pinned);
+        }
+    }
+
+    @Test
+    void wrongPinFailsAndCachesNothing() throws Exception {
+        // Mutant killed: pin comparison negated or removed - a jar that does not
+        // match its pin must never reach the cache, even though the repository's
+        // own checksum for it is valid.
+        serveJarsWithValidChecksums();
+        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        String wrongPin = sha256Of("completely different bytes".getBytes());
+
+        RuntimeException ex = assertThrows(RuntimeException.class,
+            () -> manager.loadDriverArtifacts(List.of(new DriverArtifact(FAKE_DRIVER, wrongPin))));
+        IOException io = rootIoException(ex);
+        assertTrue(io.getMessage().contains("SHA-256 pin mismatch"),
+            "message must name the failure: " + io.getMessage());
+        assertEquals(List.of(), cacheDirContents(),
+            "a jar failing pin verification must never be cached");
+    }
+
+    @Test
+    void sha256HexMatchesKnownVector() throws Exception {
+        // Mutant killed: wrong algorithm behind sha256Hex. FIPS 180 test vector:
+        // SHA-256("abc") = ba7816bf...f20015ad.
+        Path file = cacheDir.resolve("vector256.bin");
+        Files.write(file, "abc".getBytes());
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            JdbcDriverClassManager.sha256Hex(file));
+    }
+
+    /** SHA-256 computed independently of production code. */
+    private static String sha256Of(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // parseKnownDrivers - entry forms and validation
+    // ------------------------------------------------------------------
+
+    @Test
+    void parseKnownDriversAcceptsStringAndObjectEntries() throws Exception {
+        // Mutant killed: dropping either entry form (bare string, object without
+        // pin, object with pin) or mis-mapping the gav/sha256 attributes.
+        String sha = sha256Of(JAR_BYTES);
+        var parsed = JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
+            {"mixed": [
+                "com.example:bare:1.0",
+                {"gav": "com.example:unpinned:2.0"},
+                {"gav": "com.example:pinned:3.0", "sha256": "%s"}
+            ]}""".formatted(sha)));
+
+        List<DriverArtifact> mixed = parsed.get("mixed");
+        assertEquals(new DriverArtifact(new MavenCoordinates("com.example", "bare", "1.0"), null),
+            mixed.get(0), "bare string entry parses unpinned");
+        assertEquals(new DriverArtifact(new MavenCoordinates("com.example", "unpinned", "2.0"), null),
+            mixed.get(1), "object without sha256 parses unpinned");
+        assertEquals(new DriverArtifact(new MavenCoordinates("com.example", "pinned", "3.0"), sha),
+            mixed.get(2), "object with sha256 parses pinned");
+    }
+
+    @Test
+    void parseKnownDriversRejectsMalformedSha256() {
+        // Mutant killed: dropping the pin-shape validation - a truncated pin
+        // must fail at startup, not silently never match at download time.
+        IOException ex = assertThrows(IOException.class,
+            () -> JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
+                {"bad": [{"gav": "com.example:x:1.0", "sha256": "abc123"}]}""")));
+        assertTrue(ex.getMessage().contains("64 hex"),
+            "message must state the expected pin shape: " + ex.getMessage());
+    }
+
+    @Test
+    void parseKnownDriversRejectsObjectWithoutGav() {
+        // Mutant killed: accepting an entry with no coordinates.
+        IOException ex = assertThrows(IOException.class,
+            () -> JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
+                {"bad": [{"sha256only": true}]}""")));
+        assertTrue(ex.getMessage().contains("gav"),
+            "message must name the missing attribute: " + ex.getMessage());
+    }
+
+    // ------------------------------------------------------------------
     // End-to-end against the real Maven Central (network)
     // ------------------------------------------------------------------
 
@@ -385,7 +511,7 @@ class JdbcDriverClassManagerTest {
             assertTrue(Driver.class.isAssignableFrom(driverClass),
                 "org.h2.Driver must implement java.sql.Driver");
 
-            MavenCoordinates h2 = manager.getKnownDriver("h2").get(0);
+            MavenCoordinates h2 = manager.getKnownDriver("h2").get(0).coordinates();
             Path cachedJar = cacheDir.resolve(h2.artifactId() + "-" + h2.version() + ".jar");
             assertTrue(Files.exists(cachedJar), "verified jar must be cached at " + cachedJar);
         } finally {
