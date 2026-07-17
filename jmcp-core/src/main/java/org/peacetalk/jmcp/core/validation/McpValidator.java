@@ -20,6 +20,8 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
+import org.hibernate.validator.HibernateValidator;
+import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -28,6 +30,20 @@ import java.util.stream.Collectors;
  * Utility class for validating MCP protocol objects using JSR-380 Bean Validation.
  *
  * Uses Hibernate Validator as the implementation.
+ *
+ * <p>Configured with {@link ParameterMessageInterpolator} instead of the default
+ * {@link org.hibernate.validator.messageinterpolation.ResourceBundleMessageInterpolator}.
+ * The default interpolator requires a Unified EL implementation (jakarta.el) on the
+ * module path to support {@code ${...}} expressions in constraint messages — a
+ * feature this codebase's constraint annotations never use (all messages are plain
+ * {@code {jakarta.validation.constraints.X.message}} keys). Depending on it anyway
+ * makes initialization fragile across launchers that resolve the module graph's
+ * optional/static dependencies differently (Maven Surefire vs. an IDE test runner,
+ * for one - {@code org.hibernate.validator}'s {@code requires static jakarta.el}
+ * is only satisfied if something else forces that module into the runtime graph).
+ * {@code ParameterMessageInterpolator} supports the same message-key syntax without
+ * needing jakarta.el/an EL implementation present at all, so the whole class of
+ * failure disappears rather than needing to be worked around per launcher.
  *
  * <p>Example usage:
  * <pre>
@@ -43,7 +59,10 @@ public final class McpValidator {
     private static final Validator VALIDATOR;
 
     static {
-        try (ValidatorFactory factory = Validation.buildDefaultValidatorFactory()) {
+        try (ValidatorFactory factory = Validation.byProvider(HibernateValidator.class)
+                .configure()
+                .messageInterpolator(new ParameterMessageInterpolator())
+                .buildValidatorFactory()) {
             VALIDATOR = factory.getValidator();
         }
     }

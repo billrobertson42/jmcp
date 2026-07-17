@@ -96,7 +96,7 @@ public class McpClientController {
 
     // State
     private Tool selectedTool;
-    private Map<String, TextField> argumentFields;
+    private Map<String, ToolArgumentFormBuilder.FieldInput> argumentFields;
     private ResourceDescriptor selectedResource;
 
     /**
@@ -688,14 +688,17 @@ public class McpClientController {
             return;
         }
         // Once the background thread starts, its finally owns endRequest();
-        // until then, anything that throws must not leave the in-flight gate
-        // stuck closed
+        // until then, anything that throws (including invalid-argument
+        // coercion) or returns early must not leave the in-flight gate stuck
+        // closed. beginRequest() already disabled executeButton, so no
+        // separate setDisable(true) call is needed here.
         boolean started = false;
         try {
-            resultArea.setText("Executing...");
-
-            // Collect arguments
+            // Collect and coerce arguments before starting execution so that
+            // invalid input is reported immediately and nothing is executed
             Map<String, Object> arguments = formBuilder.collectArguments(argumentFields, valueParser);
+
+            resultArea.setText("Executing...");
 
             // Execute in background (daemon thread)
             Thread executeThread = new Thread(() -> {
@@ -727,6 +730,8 @@ public class McpClientController {
             executeThread.setDaemon(true);
             executeThread.start();
             started = true;
+        } catch (IllegalArgumentException e) {
+            showError(e.getMessage());
         } finally {
             if (!started) {
                 endRequest();
