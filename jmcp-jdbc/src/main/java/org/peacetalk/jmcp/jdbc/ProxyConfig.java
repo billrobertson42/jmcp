@@ -1,5 +1,8 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
 import java.util.Optional;
@@ -23,6 +26,8 @@ import java.util.regex.Pattern;
  * injectable, making this class easy to test.
  */
 public class ProxyConfig {
+
+    private static final Logger LOG = LogManager.getLogger(ProxyConfig.class);
 
     /**
      * Matches proxy env-var values of the form {@code http://host[:port][/]} or
@@ -107,6 +112,8 @@ public class ProxyConfig {
             try {
                 port = Integer.parseInt(portStr.trim());
             } catch (NumberFormatException e) {
+                LOG.warn("Ignoring proxy system properties: http.proxyPort '{}' is not a number",
+                    portStr);
                 return Optional.empty();
             }
         }
@@ -128,6 +135,12 @@ public class ProxyConfig {
         }
         Matcher matcher = ENV_PROXY_URL.matcher(fromEnv);
         if (!matcher.matches()) {
+            // Without this, a set-but-unsupported proxy variable silently
+            // degrades to a direct connection, which in a proxied network
+            // surfaces only as a mystifying connect timeout.
+            LOG.warn("Ignoring proxy environment variable '{}': not in the supported "
+                + "http(s)://host[:port] format (credentialed proxies, e.g. "
+                + "http://user:pass@host:port, are not supported)", fromEnv);
             return Optional.empty();
         }
         String host = matcher.group(1);
