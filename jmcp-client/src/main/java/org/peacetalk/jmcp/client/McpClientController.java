@@ -45,6 +45,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Controller for the MCP Client GUI.
@@ -97,6 +98,56 @@ public class McpClientController {
     private Tool selectedTool;
     private Map<String, ToolArgumentFormBuilder.FieldInput> argumentFields;
     private ResourceDescriptor selectedResource;
+
+    /**
+     * True while a request (ping, tool execution, resource read) is in flight.
+     * The transport only supports one outstanding request at a time, so the UI
+     * must not let a second request start until the current one completes.
+     */
+    private final AtomicBoolean requestInFlight = new AtomicBoolean(false);
+
+    /**
+     * Try to mark a request as in flight and disable all request-initiating
+     * controls. Returns false if another request is already running, in which
+     * case the caller must not start a new one. Must be called on the FX
+     * application thread (all callers are event handlers).
+     */
+    private boolean beginRequest() {
+        if (!requestInFlight.compareAndSet(false, true)) {
+            return false;
+        }
+        setRequestControlsDisabled(true);
+        return true;
+    }
+
+    /**
+     * Mark the in-flight request complete and re-enable request-initiating
+     * controls (unless we disconnected while the request was running).
+     * Safe to call from background threads.
+     */
+    private void endRequest() {
+        requestInFlight.set(false);
+        Platform.runLater(() -> {
+            if (mcpService.isConnected()) {
+                setRequestControlsDisabled(false);
+            }
+        });
+    }
+
+    /**
+     * Enable/disable every control that can initiate a request. Hyperlink
+     * navigation in the resource view cannot be disabled here; it is guarded
+     * by the beginRequest() check in navigateToResource() instead.
+     */
+    private void setRequestControlsDisabled(boolean disabled) {
+        pingButton.setDisable(disabled);
+        executeButton.setDisable(disabled);
+        readResourceButton.setDisable(disabled);
+        resourcesComboBox.setDisable(disabled);
+        // Also disabled: changing the tool selection re-enables the execute
+        // button via onToolSelected, which would leak through the gate
+        toolsComboBox.setDisable(disabled);
+    }
 
     @FXML
     public void initialize() {
@@ -334,38 +385,51 @@ public class McpClientController {
 
     @FXML
     private void onPing() {
-        // Disable ping button during ping to prevent rapid clicks
-        pingButton.setDisable(true);
-        statusLabel.setText("Pinging server...");
+        // Only one request may be in flight at a time
+        if (!beginRequest()) {
+            return;
+        }
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws must not leave the in-flight gate
+        // stuck closed
+        boolean started = false;
+        try {
+            statusLabel.setText("Pinging server...");
 
-        // Run ping in background thread
-        Thread pingThread = new Thread(() -> {
-            try {
-                boolean success = mcpService.ping();
+            // Run ping in background thread
+            Thread pingThread = new Thread(() -> {
+                try {
+                    boolean success = mcpService.ping();
 
-                Platform.runLater(() -> {
-                    if (success) {
-                        statusLabel.setText("Connected - Ping successful");
-                        // Show brief success message in result area
-                        resultArea.setText("✓ Server responded to ping");
-                    } else {
-                        statusLabel.setText("Connected - Ping failed");
-                        showError("Server did not respond to ping");
-                    }
-                    pingButton.setDisable(false);
-                });
+                    Platform.runLater(() -> {
+                        if (success) {
+                            statusLabel.setText("Connected - Ping successful");
+                            // Show brief success message in result area
+                            resultArea.setText("✓ Server responded to ping");
+                        } else {
+                            statusLabel.setText("Connected - Ping failed");
+                            showError("Server did not respond to ping");
+                        }
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Ping error: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    statusLabel.setText("Connected - Ping error");
-                    showError("Ping failed: " + e.getMessage());
-                    pingButton.setDisable(false);
-                });
+                } catch (Exception e) {
+                    LOG.error("Ping error: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Connected - Ping error");
+                        showError("Ping failed: " + e.getMessage());
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            pingThread.setDaemon(true);
+            pingThread.start();
+            started = true;
+        } finally {
+            if (!started) {
+                endRequest();
             }
-        });
-        pingThread.setDaemon(true);
-        pingThread.start();
+        }
     }
 
     /**
@@ -456,38 +520,53 @@ public class McpClientController {
      * This is called both from the Read Resource button and from clicking links.
      */
     private void navigateToResource(String uri) {
-        readResourceButton.setDisable(true);
-        navigableResourceView.clear();
-        resourceBreadcrumb.setText("Loading: " + uri);
+        // Only one request may be in flight at a time. This also guards
+        // hyperlink navigation, which has no button to disable.
+        if (!beginRequest()) {
+            return;
+        }
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws must not leave the in-flight gate
+        // stuck closed
+        boolean started = false;
+        try {
+            navigableResourceView.clear();
+            resourceBreadcrumb.setText("Loading: " + uri);
 
-        // Execute in background (daemon thread)
-        Thread readThread = new Thread(() -> {
-            try {
-                ReadResourceResult result = mcpService.readResource(uri);
+            // Execute in background (daemon thread)
+            Thread readThread = new Thread(() -> {
+                try {
+                    ReadResourceResult result = mcpService.readResource(uri);
 
-                // Format the result for display
-                String displayContent = formatResourceResult(result);
+                    // Format the result for display
+                    String displayContent = formatResourceResult(result);
 
-                Platform.runLater(() -> {
-                    // Add to history and display
-                    resourceHistory.navigateTo(uri, displayContent);
-                    displayResourceContent(uri, displayContent);
-                    updateBackButtonState();
-                    readResourceButton.setDisable(false);
-                });
+                    Platform.runLater(() -> {
+                        // Add to history and display
+                        resourceHistory.navigateTo(uri, displayContent);
+                        displayResourceContent(uri, displayContent);
+                        updateBackButtonState();
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Resource read failed: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    showError("Resource read failed: " + e.getMessage());
-                    navigableResourceView.setContent("Error: " + e.getMessage());
-                    resourceBreadcrumb.setText("Error loading: " + uri);
-                    readResourceButton.setDisable(false);
-                });
+                } catch (Exception e) {
+                    LOG.error("Resource read failed: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        showError("Resource read failed: " + e.getMessage());
+                        navigableResourceView.setContent("Error: " + e.getMessage());
+                        resourceBreadcrumb.setText("Error loading: " + uri);
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            readThread.setDaemon(true);
+            readThread.start();
+            started = true;
+        } finally {
+            if (!started) {
+                endRequest();
             }
-        });
-        readThread.setDaemon(true);
-        readThread.start();
+        }
     }
 
     /**
@@ -604,48 +683,60 @@ public class McpClientController {
             return;
         }
 
-        // Collect and coerce arguments before starting execution so that
-        // invalid input is reported immediately and nothing is executed
-        Map<String, Object> arguments;
-        try {
-            arguments = formBuilder.collectArguments(argumentFields, valueParser);
-        } catch (IllegalArgumentException e) {
-            showError(e.getMessage());
+        // Only one request may be in flight at a time
+        if (!beginRequest()) {
             return;
         }
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws (including invalid-argument
+        // coercion) or returns early must not leave the in-flight gate stuck
+        // closed. beginRequest() already disabled executeButton, so no
+        // separate setDisable(true) call is needed here.
+        boolean started = false;
+        try {
+            // Collect and coerce arguments before starting execution so that
+            // invalid input is reported immediately and nothing is executed
+            Map<String, Object> arguments = formBuilder.collectArguments(argumentFields, valueParser);
 
-        executeButton.setDisable(true);
-        resultArea.setText("Executing...");
+            resultArea.setText("Executing...");
 
-        // Execute in background (daemon thread)
-        Thread executeThread = new Thread(() -> {
-            try {
-                CallToolResult result = mcpService.executeTool(selectedTool.name(), arguments);
+            // Execute in background (daemon thread)
+            Thread executeThread = new Thread(() -> {
+                try {
+                    CallToolResult result = mcpService.executeTool(selectedTool.name(), arguments);
 
-                // Apply JSON decoding transformation if enabled
-                Object displayResult = decodeJsonCheckBox.isSelected()
-                    ? decodeJsonInResult(result)
-                    : result;
+                    // Apply JSON decoding transformation if enabled
+                    Object displayResult = decodeJsonCheckBox.isSelected()
+                        ? decodeJsonInResult(result)
+                        : result;
 
-                // Pretty print result
-                String prettyResult = MAPPER.writerWithDefaultPrettyPrinter()
-                        .writeValueAsString(displayResult);
+                    // Pretty print result
+                    String prettyResult = MAPPER.writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(displayResult);
 
-                Platform.runLater(() -> {
-                    resultArea.setText(prettyResult);
-                    executeButton.setDisable(false);
-                });
+                    Platform.runLater(() -> {
+                        resultArea.setText(prettyResult);
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Error executing tool: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    resultArea.setText("Error: " + e.getMessage());
-                    executeButton.setDisable(false);
-                });
+                } catch (Exception e) {
+                    LOG.error("Error executing tool: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        resultArea.setText("Error: " + e.getMessage());
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            executeThread.setDaemon(true);
+            executeThread.start();
+            started = true;
+        } catch (IllegalArgumentException e) {
+            showError(e.getMessage());
+        } finally {
+            if (!started) {
+                endRequest();
             }
-        });
-        executeThread.setDaemon(true);
-        executeThread.start();
+        }
     }
 
     private void updateConnectionState(boolean connected) {
