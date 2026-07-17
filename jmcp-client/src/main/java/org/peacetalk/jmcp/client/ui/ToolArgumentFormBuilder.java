@@ -31,15 +31,21 @@ import java.util.Map;
 public class ToolArgumentFormBuilder {
 
     /**
+     * A form input field together with its declared JSON-schema type
+     * (null when the schema declares no type for the field).
+     */
+    public record FieldInput(TextField textField, String schemaType) {}
+
+    /**
      * Build an argument input form for the given tool.
      *
      * @param tool The tool to build the form for
      * @param container The VBox container to add form fields to
      * @param onEnterAction Action to execute when Enter is pressed in any field
-     * @return Map of field names to TextField controls
+     * @return Map of field names to form inputs (text field + declared schema type)
      */
-    public Map<String, TextField> buildForm(Tool tool, VBox container, Runnable onEnterAction) {
-        Map<String, TextField> argumentFields = new HashMap<>();
+    public Map<String, FieldInput> buildForm(Tool tool, VBox container, Runnable onEnterAction) {
+        Map<String, FieldInput> argumentFields = new HashMap<>();
 
         container.getChildren().clear();
 
@@ -54,8 +60,7 @@ public class ToolArgumentFormBuilder {
                 String fieldName = entry.getKey();
                 JsonNode fieldSchema = entry.getValue();
 
-                boolean isRequired = requiredFields != null &&
-                        requiredFields.toString().contains(fieldName);
+                boolean isRequired = isRequired(requiredFields, fieldName);
 
                 // Create label with style class
                 Label label = new Label(fieldName + (isRequired ? " *" : ""));
@@ -70,7 +75,7 @@ public class ToolArgumentFormBuilder {
                     textField.setOnAction(event -> onEnterAction.run());
                 }
 
-                argumentFields.put(fieldName, textField);
+                argumentFields.put(fieldName, new FieldInput(textField, getSchemaType(fieldSchema)));
 
                 container.getChildren().addAll(label, textField);
             }
@@ -85,6 +90,36 @@ public class ToolArgumentFormBuilder {
     }
 
     /**
+     * Check whether a field is listed in the schema's "required" array.
+     * Compares element values by equality, not substring matching.
+     *
+     * @param requiredFields The schema's "required" array node, or null
+     * @param fieldName The field name to look for
+     * @return true if the field name appears in the required array
+     */
+    public static boolean isRequired(JsonNode requiredFields, String fieldName) {
+        if (requiredFields == null || !requiredFields.isArray()) {
+            return false;
+        }
+        for (int i = 0; i < requiredFields.size(); i++) {
+            JsonNode element = requiredFields.get(i);
+            if (element.isString() && fieldName.equals(element.stringValue())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Extract a field's declared JSON-schema type, or null when the schema
+     * has no (string-valued) "type".
+     */
+    private static String getSchemaType(JsonNode fieldSchema) {
+        JsonNode type = fieldSchema.path("type");
+        return type.isString() ? type.stringValue() : null;
+    }
+
+    /**
      * Clear the form from the container.
      *
      * @param container The VBox container to clear
@@ -94,19 +129,23 @@ public class ToolArgumentFormBuilder {
     }
 
     /**
-     * Collect argument values from the form fields.
+     * Collect argument values from the form fields, coercing each non-empty
+     * value to its declared schema type.
      *
-     * @param fields Map of field names to TextField controls
-     * @param valueParser Parser to convert string values to appropriate types
+     * @param fields Map of field names to form inputs
+     * @param valueParser Coercer that converts string values to the declared types
      * @return Map of argument names to values
+     * @throws IllegalArgumentException if a value cannot be coerced to its
+     *         declared schema type
      */
-    public Map<String, Object> collectArguments(Map<String, TextField> fields, ValueParser valueParser) {
+    public Map<String, Object> collectArguments(Map<String, FieldInput> fields, ValueParser valueParser) {
         Map<String, Object> arguments = new HashMap<>();
 
-        for (Map.Entry<String, TextField> entry : fields.entrySet()) {
-            String value = entry.getValue().getText().trim();
+        for (Map.Entry<String, FieldInput> entry : fields.entrySet()) {
+            String value = entry.getValue().textField().getText().trim();
             if (!value.isEmpty()) {
-                arguments.put(entry.getKey(), valueParser.parse(value));
+                arguments.put(entry.getKey(),
+                        valueParser.coerce(entry.getKey(), entry.getValue().schemaType(), value));
             }
         }
 
@@ -127,4 +166,3 @@ public class ToolArgumentFormBuilder {
         return "";
     }
 }
-
