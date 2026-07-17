@@ -139,9 +139,23 @@ class JdbcDriverClassManagerTest {
         // Mutant killed: KNOWN_DRIVERS entry for "h2" pointing at the wrong
         // groupId/artifactId, or the lookup ignoring its key.
         var manager = new JdbcDriverClassManager(cacheDir);
-        MavenCoordinates h2 = manager.getKnownDriver("h2");
-        assertEquals("com.h2database", h2.groupId());
-        assertEquals("h2", h2.artifactId());
+        List<MavenCoordinates> h2 = manager.getKnownDriver("h2");
+        assertEquals(1, h2.size(), "h2 is a single-jar driver");
+        assertEquals("com.h2database", h2.get(0).groupId());
+        assertEquals("h2", h2.get(0).artifactId());
+    }
+
+    @Test
+    void sqlServerDriverIncludesMsal4jCompanion() throws Exception {
+        // Mutant killed: dropping the companion artifact from the sqlserver
+        // entry - Azure AD auth needs msal4j on the driver's classpath, and
+        // the driver jar must stay first (it is what loadDriverClass resolves).
+        var manager = new JdbcDriverClassManager(cacheDir);
+        List<MavenCoordinates> sqlserver = manager.getKnownDriver("sqlserver");
+        assertEquals("mssql-jdbc", sqlserver.get(0).artifactId(),
+            "the JDBC driver must be the first artifact");
+        assertTrue(sqlserver.stream().anyMatch(c -> c.artifactId().equals("msal4j")),
+            "sqlserver must ship msal4j for Azure AD authentication: " + sqlserver);
     }
 
     @Test
@@ -309,6 +323,33 @@ class JdbcDriverClassManagerTest {
         }
     }
 
+    @Test
+    void multiArtifactDriverDownloadsAllJarsIntoOneLoader() throws Exception {
+        // Mutants killed: only the first artifact downloaded (the companion jar
+        // must be cached too), and the loader cache key ignoring companion
+        // artifacts (a single-jar load of the same first artifact must get a
+        // DIFFERENT classloader than the multi-jar load).
+        serveJarsWithValidChecksums();
+        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        List<MavenCoordinates> pair = List.of(FAKE_DRIVER, OTHER_FAKE_DRIVER);
+        try {
+            var pairLoader = manager.loadDriver(pair);
+            assertArrayEquals(JAR_BYTES, Files.readAllBytes(cacheDir.resolve("fake-driver-1.0.jar")),
+                "first artifact must be downloaded and cached");
+            assertArrayEquals(JAR_BYTES, Files.readAllBytes(cacheDir.resolve("other-driver-2.0.jar")),
+                "companion artifact must be downloaded and cached");
+
+            assertSame(pairLoader, manager.loadDriver(pair),
+                "same artifact list must reuse the cached classloader");
+            assertNotSame(pairLoader, manager.loadDriver(FAKE_DRIVER),
+                "a single-jar driver sharing the first artifact must not share "
+                    + "the multi-jar driver's classloader");
+        } finally {
+            manager.unloadDriver(pair);
+            manager.unloadDriver(FAKE_DRIVER);
+        }
+    }
+
     // ------------------------------------------------------------------
     // End-to-end against the real Maven Central (network)
     // ------------------------------------------------------------------
@@ -329,7 +370,7 @@ class JdbcDriverClassManagerTest {
             assertTrue(Driver.class.isAssignableFrom(driverClass),
                 "org.h2.Driver must implement java.sql.Driver");
 
-            MavenCoordinates h2 = manager.getKnownDriver("h2");
+            MavenCoordinates h2 = manager.getKnownDriver("h2").get(0);
             Path cachedJar = cacheDir.resolve(h2.artifactId() + "-" + h2.version() + ".jar");
             assertTrue(Files.exists(cachedJar), "verified jar must be cached at " + cachedJar);
         } finally {

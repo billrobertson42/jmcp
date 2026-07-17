@@ -36,7 +36,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Driver;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
@@ -52,14 +54,22 @@ public class JdbcDriverClassManager {
     private static final MavenCoordinates HIKARI_CP =
         new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2");
 
-    private static final Map<String, MavenCoordinates> KNOWN_DRIVERS = Map.ofEntries(
-        Map.entry("postgresql", new MavenCoordinates("org.postgresql", "postgresql", "42.7.8")),
-        Map.entry("mysql", new MavenCoordinates("com.mysql", "mysql-connector-j", "9.5.0")),
-        Map.entry("mariadb", new MavenCoordinates("org.mariadb.jdbc", "mariadb-java-client", "3.5.7")),
-        Map.entry("oracle", new MavenCoordinates("com.oracle.database.jdbc", "ojdbc11", "23.7.0.25.01")),
-        Map.entry("sqlserver", new MavenCoordinates("com.microsoft.sqlserver", "mssql-jdbc", "13.2.1.jre11")),
-        Map.entry("h2", new MavenCoordinates("com.h2database", "h2", "2.4.240")),
-        Map.entry("sqlite", new MavenCoordinates("org.xerial", "sqlite-jdbc", "3.51.1.0"))
+    /**
+     * Artifacts per database type. The first entry is the JDBC driver itself;
+     * any further entries are companion jars the driver needs on its classpath.
+     * sqlserver ships msal4j so Azure AD authentication works out of the box
+     * (Azure SQL and plain SQL Server are deliberately the same type).
+     */
+    private static final Map<String, List<MavenCoordinates>> KNOWN_DRIVERS = Map.ofEntries(
+        Map.entry("postgresql", List.of(new MavenCoordinates("org.postgresql", "postgresql", "42.7.8"))),
+        Map.entry("mysql", List.of(new MavenCoordinates("com.mysql", "mysql-connector-j", "9.5.0"))),
+        Map.entry("mariadb", List.of(new MavenCoordinates("org.mariadb.jdbc", "mariadb-java-client", "3.5.7"))),
+        Map.entry("oracle", List.of(new MavenCoordinates("com.oracle.database.jdbc", "ojdbc11", "23.7.0.25.01"))),
+        Map.entry("sqlserver", List.of(
+            new MavenCoordinates("com.microsoft.sqlserver", "mssql-jdbc", "13.2.1.jre11"),
+            new MavenCoordinates("com.microsoft.azure", "msal4j", "1.25.0"))),
+        Map.entry("h2", List.of(new MavenCoordinates("com.h2database", "h2", "2.4.240"))),
+        Map.entry("sqlite", List.of(new MavenCoordinates("org.xerial", "sqlite-jdbc", "3.51.1.0")))
     );
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
@@ -104,39 +114,63 @@ public class JdbcDriverClassManager {
     }
 
     /**
-     * Get known driver coordinates by database type
+     * Get the known artifacts for a database type. The first entry is the JDBC
+     * driver; any further entries are companion jars.
      */
-    public MavenCoordinates getKnownDriver(String databaseType) {
-        MavenCoordinates coordinates = KNOWN_DRIVERS.get(databaseType.toLowerCase());
-        if (coordinates == null) {
+    public List<MavenCoordinates> getKnownDriver(String databaseType) {
+        List<MavenCoordinates> artifacts = KNOWN_DRIVERS.get(databaseType.toLowerCase());
+        if (artifacts == null) {
             throw new IllegalArgumentException("Unknown database type: " + databaseType);
         }
-        return coordinates;
+        return artifacts;
     }
 
     /**
      * Load a driver by database type (postgresql, mysql, etc.)
      */
     public DriverClassLoader loadDriver(String databaseType) throws Exception {
-        MavenCoordinates coordinates = getKnownDriver(databaseType);
-        return loadDriver(coordinates);
+        return loadDriver(getKnownDriver(databaseType));
     }
 
     /**
-     * Load a driver by Maven coordinates
+     * Load a single-jar driver by Maven coordinates
      */
     public DriverClassLoader loadDriver(MavenCoordinates coordinates) throws Exception {
-        String key = coordinates.toString();
+        return loadDriver(List.of(coordinates));
+    }
 
-        return loadedDrivers.computeIfAbsent(key, k -> {
+    /**
+     * Load a driver made of one or more artifacts. All jars are downloaded
+     * (and SHA-1 verified) and loaded together in one isolated classloader.
+     */
+    public DriverClassLoader loadDriver(List<MavenCoordinates> artifacts) throws Exception {
+        return loadedDrivers.computeIfAbsent(cacheKey(artifacts), k -> {
             try {
-                Path driverJarPath = downloadDriver(coordinates);
-                Path hikariJarPath = downloadDriver(HIKARI_CP);
-                return new DriverClassLoader(driverJarPath, hikariJarPath);
+                List<Path> jarPaths = new ArrayList<>();
+                for (MavenCoordinates coordinates : artifacts) {
+                    jarPaths.add(downloadDriver(coordinates));
+                }
+                jarPaths.add(downloadDriver(HIKARI_CP));
+                return new DriverClassLoader(jarPaths);
             } catch (Exception e) {
-                throw new RuntimeException("Failed to load driver: " + coordinates, e);
+                throw new RuntimeException("Failed to load driver: " + artifacts, e);
             }
         });
+    }
+
+    /**
+     * Cache key covering every artifact of the driver, so two drivers sharing a
+     * first artifact but differing in companions get distinct classloaders.
+     */
+    private static String cacheKey(List<MavenCoordinates> artifacts) {
+        StringBuilder key = new StringBuilder();
+        for (MavenCoordinates coordinates : artifacts) {
+            if (key.length() > 0) {
+                key.append('+');
+            }
+            key.append(coordinates);
+        }
+        return key.toString();
     }
 
     /**
@@ -264,33 +298,42 @@ public class JdbcDriverClassManager {
      * Unload a driver and close its classloader
      */
     public void unloadDriver(String databaseType) throws Exception {
-        MavenCoordinates coordinates = getKnownDriver(databaseType);
-        if (coordinates != null) {
-            unloadDriver(coordinates);
-        }
+        unloadDriver(getKnownDriver(databaseType));
     }
 
     /**
-     * Unload a driver by coordinates
+     * Unload a single-jar driver by coordinates
      */
     public void unloadDriver(MavenCoordinates coordinates) throws Exception {
-        String key = coordinates.toString();
-        DriverClassLoader classLoader = loadedDrivers.remove(key);
+        unloadDriver(List.of(coordinates));
+    }
+
+    /**
+     * Unload a driver by its full artifact list
+     */
+    public void unloadDriver(List<MavenCoordinates> artifacts) throws Exception {
+        DriverClassLoader classLoader = loadedDrivers.remove(cacheKey(artifacts));
         if (classLoader != null) {
             classLoader.close();
         }
     }
 
     /**
-     * Isolated ClassLoader for JDBC driver and HikariCP
-     * This ensures the driver and connection pool are completely isolated
+     * Isolated ClassLoader for the driver's jars (driver, companion artifacts,
+     * HikariCP). This ensures the driver and connection pool are completely
+     * isolated.
      */
     public static class DriverClassLoader extends URLClassLoader {
-        public DriverClassLoader(Path driverJarPath, Path hikariJarPath) throws Exception {
-            super(new URL[]{
-                driverJarPath.toUri().toURL(),
-                hikariJarPath.toUri().toURL()
-            }, ClassLoader.getPlatformClassLoader());
+        public DriverClassLoader(List<Path> jarPaths) throws Exception {
+            super(toUrls(jarPaths), ClassLoader.getPlatformClassLoader());
+        }
+
+        private static URL[] toUrls(List<Path> jarPaths) throws Exception {
+            URL[] urls = new URL[jarPaths.size()];
+            for (int i = 0; i < jarPaths.size(); i++) {
+                urls[i] = jarPaths.get(i).toUri().toURL();
+            }
+            return urls;
         }
 
         /**
