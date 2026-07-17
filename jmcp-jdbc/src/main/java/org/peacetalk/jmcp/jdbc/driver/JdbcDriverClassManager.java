@@ -28,6 +28,7 @@ import java.net.URLClassLoader;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -95,9 +96,9 @@ public class JdbcDriverClassManager {
         HttpClient.Builder builder = HttpClient.newBuilder()
             .connectTimeout(CONNECT_TIMEOUT)
             .followRedirects(HttpClient.Redirect.NORMAL);
-        // If http.proxyHost/http.proxyPort system properties are set, the client's
-        // default ProxySelector.getDefault() already honors them; ProxyConfig only
-        // supplies an override for the HTTP_PROXY/HTTPS_PROXY env-var convention.
+        // The default selector only honors https.proxyHost for our https URLs;
+        // ProxyConfig supplies a selector for the http.proxyHost compat and
+        // HTTP_PROXY/HTTPS_PROXY env-var conventions the default would ignore.
         new ProxyConfig().proxySelector().ifPresent(builder::proxy);
         this.httpClient = builder.build();
     }
@@ -169,7 +170,18 @@ public class JdbcDriverClassManager {
                     + " but downloaded file has " + actualSha1);
             }
 
-            Files.move(tempFile, targetPath, StandardCopyOption.ATOMIC_MOVE);
+            try {
+                Files.move(tempFile, targetPath, StandardCopyOption.ATOMIC_MOVE);
+            } catch (FileAlreadyExistsException e) {
+                // Another process published the jar between our exists-check and
+                // this move (the cache dir may be shared by multiple servers, so
+                // in-JVM locking could not prevent this). POSIX rename replaces
+                // silently; on filesystems that throw instead, the file that won
+                // is the same verified artifact - treat as success.
+                if (!Files.exists(targetPath)) {
+                    throw e;
+                }
+            }
         } finally {
             // No-op after a successful move; removes partial/unverified data otherwise.
             Files.deleteIfExists(tempFile);

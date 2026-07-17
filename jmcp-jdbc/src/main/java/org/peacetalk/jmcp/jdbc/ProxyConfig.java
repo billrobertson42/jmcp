@@ -11,10 +11,13 @@ import java.util.regex.Pattern;
  * Supplies the HTTP proxy override for {@code java.net.http.HttpClient}.
  *
  * <p>The JDK's default {@link ProxySelector} (used by {@code HttpClient} when no
- * explicit selector is set) already honors the {@code http.proxyHost} /
- * {@code http.proxyPort} system properties. This class therefore only covers what
- * the JDK does not: the {@code HTTP_PROXY} / {@code HTTPS_PROXY} (and lower-case)
- * environment-variable convention.
+ * explicit selector is set) applies system properties <em>per protocol</em>: it
+ * consults {@code https.proxyHost} for the https URLs this client fetches, and
+ * {@code http.proxyHost} only for plain-http URLs. This class covers the two
+ * conventions the default selector would miss for https traffic:
+ * {@code http.proxyHost}/{@code http.proxyPort} (honored by the pre-HttpClient
+ * implementation, so kept for compatibility) and the {@code HTTP_PROXY} /
+ * {@code HTTPS_PROXY} (and lower-case) environment variables.
  *
  * <p>The lookup functions for system properties and environment variables are
  * injectable, making this class easy to test.
@@ -58,19 +61,56 @@ public class ProxyConfig {
     /**
      * Returns the {@link ProxySelector} to install on an {@code HttpClient}, if any.
      *
-     * <p>Empty when the {@code http.proxyHost} system property is set (the client's
-     * default selector already honors it) and when no proxy is configured at all —
-     * in both cases the caller should leave the {@code HttpClient} default in place.
-     * Present only when the proxy comes from the {@code HTTP_PROXY} /
-     * {@code HTTPS_PROXY} environment variables, which the JDK ignores.
+     * <p>Resolution order:
+     * <ol>
+     *   <li>{@code https.proxyHost} set → empty: the default selector already
+     *       applies it to this client's https URLs, and it must win over the
+     *       fallbacks below.</li>
+     *   <li>{@code http.proxyHost} set → a selector built from
+     *       {@code http.proxyHost}/{@code http.proxyPort}. The default selector
+     *       ignores these for https URLs, but the pre-HttpClient implementation
+     *       honored them, so they keep working.</li>
+     *   <li>{@code HTTP_PROXY}/{@code HTTPS_PROXY} environment variables, which
+     *       the JDK ignores entirely.</li>
+     *   <li>Nothing configured → empty (direct connections).</li>
+     * </ol>
      *
-     * @return a selector for the env-var-configured proxy, or empty
+     * @return the proxy selector to install, or empty to keep the client default
      */
     public Optional<ProxySelector> proxySelector() {
-        if (sys.apply("http.proxyHost") != null) {
+        if (sys.apply("https.proxyHost") != null) {
             return Optional.empty();
         }
+        Optional<InetSocketAddress> fromSysProps = sysPropProxyAddress();
+        if (fromSysProps.isPresent()) {
+            return fromSysProps.map(ProxySelector::of);
+        }
         return envProxyAddress().map(ProxySelector::of);
+    }
+
+    /**
+     * Parses the proxy address from the {@code http.proxyHost} /
+     * {@code http.proxyPort} system properties. A missing port defaults to
+     * {@value #DEFAULT_PROXY_PORT}; a non-numeric port yields empty.
+     *
+     * @return the unresolved proxy address, or empty if {@code http.proxyHost}
+     *         is not set or the port is unparseable
+     */
+    public Optional<InetSocketAddress> sysPropProxyAddress() {
+        String host = sys.apply("http.proxyHost");
+        if (host == null || host.isBlank()) {
+            return Optional.empty();
+        }
+        String portStr = sys.apply("http.proxyPort");
+        int port = DEFAULT_PROXY_PORT;
+        if (portStr != null) {
+            try {
+                port = Integer.parseInt(portStr.trim());
+            } catch (NumberFormatException e) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(InetSocketAddress.createUnresolved(host, port));
     }
 
     /**

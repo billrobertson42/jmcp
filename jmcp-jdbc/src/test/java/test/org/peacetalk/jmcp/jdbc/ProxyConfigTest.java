@@ -80,15 +80,63 @@ class ProxyConfigTest {
     // ------------------------------------------------------------------
 
     @Test
-    void proxySelectorEmptyWhenSystemPropertySet() {
-        // Mutant killed: removing the http.proxyHost system-property check, which
-        // would wrongly override the JDK default selector with the env-var proxy.
+    void proxySelectorEmptyWhenHttpsProxyHostSet() {
+        // Mutant killed: removing the https.proxyHost check. The default selector
+        // already applies https.proxyHost to this client's https URLs, so an
+        // env-var (or http.proxyHost) selector must not override it.
         Optional<ProxySelector> selector = config(
-            Map.of("http.proxyHost", "sys.example.com"),
+            Map.of("https.proxyHost", "sys.example.com"),
             Map.of("HTTP_PROXY", "http://env.example.com:8080")
         ).proxySelector();
         assertEquals(Optional.empty(), selector,
-            "system-property proxies must be left to the JDK default selector");
+            "https.proxyHost must be left to the JDK default selector");
+    }
+
+    @Test
+    void proxySelectorBuiltFromHttpProxySystemProperties() {
+        // Mutants killed: dropping the http.proxyHost compat branch (the default
+        // selector ignores http.proxyHost for https URLs, so downloads would go
+        // DIRECT - the regression this branch fixes), and flipping the
+        // system-property-over-env-var precedence.
+        ProxySelector selector = config(
+            Map.of("http.proxyHost", "sys.example.com", "http.proxyPort", "3128"),
+            Map.of("HTTP_PROXY", "http://env.example.com:8080")
+        ).proxySelector()
+            .orElseThrow(() -> new AssertionError(
+                "http.proxyHost is set; a compat selector must be installed"));
+
+        List<Proxy> proxies = selector.select(URI.create("https://repo1.maven.org/maven2/a/b/c.jar"));
+        assertEquals(1, proxies.size(), "exactly one proxy expected");
+        assertEquals(addr("sys.example.com", 3128), proxies.get(0).address(),
+            "system properties must win over the env-var proxy");
+    }
+
+    // Mutants killed: http.proxyPort ignored (default 80 always used), default
+    // port changed, unset host not yielding empty, non-numeric port crashing or
+    // producing a bogus address instead of empty.
+    @ParameterizedTest(name = "[{index}] {0}")
+    @MethodSource("sysPropProxyAddressCases")
+    void sysPropProxyAddress(String description, Map<String, String> sysProps, InetSocketAddress expected) {
+        Optional<InetSocketAddress> actual = config(sysProps, Map.of()).sysPropProxyAddress();
+        assertEquals(Optional.ofNullable(expected), actual, description);
+    }
+
+    static Stream<Arguments> sysPropProxyAddressCases() {
+        return Stream.of(
+            Arguments.of("host and port",
+                mapOf("http.proxyHost", "proxy.example.com", "http.proxyPort", "3128"),
+                addr("proxy.example.com", 3128)),
+            Arguments.of("host without port defaults to 80",
+                Map.of("http.proxyHost", "proxy.example.com"),
+                addr("proxy.example.com", 80)),
+            Arguments.of("nothing configured",
+                Map.of(), null),
+            Arguments.of("blank host",
+                Map.of("http.proxyHost", "  "), null),
+            Arguments.of("non-numeric port",
+                mapOf("http.proxyHost", "proxy.example.com", "http.proxyPort", "abc"),
+                null)
+        );
     }
 
     @Test
