@@ -25,6 +25,7 @@ import org.peacetalk.jmcp.core.model.JsonRpcResponse;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.PipedReader;
 import java.io.PipedWriter;
 import java.io.PrintWriter;
@@ -193,6 +194,31 @@ class StdioClientTransportTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    /**
+     * Kills the mutant: treat a null-id response like a stale one and skip it.
+     * A null id is not stale - it is how a server reports a request it could
+     * not parse at all (JSON-RPC 2.0), so no response with our id is ever
+     * coming. The skip mutant blocks forever on readLine and fails the
+     * preemptive timeout; this test requires the exchange to fail fast with
+     * the server's error message instead.
+     */
+    @Test
+    void nullIdErrorResponseFailsTheExchangeInsteadOfBeingSkipped() throws Exception {
+        connect((request, out) ->
+                out.println("{\"jsonrpc\":\"2.0\",\"id\":null,"
+                        + "\"error\":{\"code\":-32700,\"message\":\"Parse error\"}}"));
+
+        IOException ex = assertTimeoutPreemptively(EXCHANGE_TIMEOUT,
+                () -> assertThrows(IOException.class,
+                        () -> transport.sendRequest("ping", Map.of()),
+                        "a null-id error response must fail the exchange"));
+
+        assertTrue(ex.getMessage().contains("Parse error"),
+                "the exception must carry the server's error message; got: " + ex.getMessage());
+        assertEquals(List.of(), listener.responses,
+                "a null-id error response must not be delivered as a response");
     }
 
     /**

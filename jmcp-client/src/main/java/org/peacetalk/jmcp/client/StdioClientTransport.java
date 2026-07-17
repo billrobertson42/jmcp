@@ -203,6 +203,18 @@ public class StdioClientTransport implements AutoCloseable {
                 // Try to parse as JSON-RPC response
                 try {
                     JsonRpcResponse response = MAPPER.readValue(responseLine, JsonRpcResponse.class);
+                    if (response.id() == null) {
+                        // Not stale: a null id is how servers report a request
+                        // they could not parse at all (JSON-RPC 2.0). No
+                        // response with our id is coming - fail this exchange.
+                        String detail = response.error() != null
+                                ? response.error().message()
+                                : responseLine;
+                        IOException error = new IOException(
+                                "Server reported a protocol error: " + detail);
+                        notifyError("Server reported a protocol error", error);
+                        throw error;
+                    }
                     if (!idMatches(sentId, response.id())) {
                         // Stale response from a previously abandoned request -
                         // report it and keep reading until the matching id (or EOF)
@@ -221,6 +233,10 @@ public class StdioClientTransport implements AutoCloseable {
                         notifyError("Failed to parse response", jack);
                     }
                     throw jack;
+                } catch (IOException e) {
+                    // Our own protocol-error signal from above (Jackson 3
+                    // exceptions are unchecked) - already notified, rethrow as-is
+                    throw e;
                 } catch (Exception e) {
                     notifyError("Failed to parse response", e);
                     throw new IOException("Failed to parse response: " + e.getMessage(), e);

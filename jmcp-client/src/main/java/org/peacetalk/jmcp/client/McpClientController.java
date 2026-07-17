@@ -144,6 +144,9 @@ public class McpClientController {
         executeButton.setDisable(disabled);
         readResourceButton.setDisable(disabled);
         resourcesComboBox.setDisable(disabled);
+        // Also disabled: changing the tool selection re-enables the execute
+        // button via onToolSelected, which would leak through the gate
+        toolsComboBox.setDisable(disabled);
     }
 
     @FXML
@@ -386,36 +389,47 @@ public class McpClientController {
         if (!beginRequest()) {
             return;
         }
-        statusLabel.setText("Pinging server...");
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws must not leave the in-flight gate
+        // stuck closed
+        boolean started = false;
+        try {
+            statusLabel.setText("Pinging server...");
 
-        // Run ping in background thread
-        Thread pingThread = new Thread(() -> {
-            try {
-                boolean success = mcpService.ping();
+            // Run ping in background thread
+            Thread pingThread = new Thread(() -> {
+                try {
+                    boolean success = mcpService.ping();
 
-                Platform.runLater(() -> {
-                    if (success) {
-                        statusLabel.setText("Connected - Ping successful");
-                        // Show brief success message in result area
-                        resultArea.setText("✓ Server responded to ping");
-                    } else {
-                        statusLabel.setText("Connected - Ping failed");
-                        showError("Server did not respond to ping");
-                    }
-                });
+                    Platform.runLater(() -> {
+                        if (success) {
+                            statusLabel.setText("Connected - Ping successful");
+                            // Show brief success message in result area
+                            resultArea.setText("✓ Server responded to ping");
+                        } else {
+                            statusLabel.setText("Connected - Ping failed");
+                            showError("Server did not respond to ping");
+                        }
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Ping error: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    statusLabel.setText("Connected - Ping error");
-                    showError("Ping failed: " + e.getMessage());
-                });
-            } finally {
+                } catch (Exception e) {
+                    LOG.error("Ping error: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        statusLabel.setText("Connected - Ping error");
+                        showError("Ping failed: " + e.getMessage());
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            pingThread.setDaemon(true);
+            pingThread.start();
+            started = true;
+        } finally {
+            if (!started) {
                 endRequest();
             }
-        });
-        pingThread.setDaemon(true);
-        pingThread.start();
+        }
     }
 
     /**
@@ -511,37 +525,48 @@ public class McpClientController {
         if (!beginRequest()) {
             return;
         }
-        navigableResourceView.clear();
-        resourceBreadcrumb.setText("Loading: " + uri);
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws must not leave the in-flight gate
+        // stuck closed
+        boolean started = false;
+        try {
+            navigableResourceView.clear();
+            resourceBreadcrumb.setText("Loading: " + uri);
 
-        // Execute in background (daemon thread)
-        Thread readThread = new Thread(() -> {
-            try {
-                ReadResourceResult result = mcpService.readResource(uri);
+            // Execute in background (daemon thread)
+            Thread readThread = new Thread(() -> {
+                try {
+                    ReadResourceResult result = mcpService.readResource(uri);
 
-                // Format the result for display
-                String displayContent = formatResourceResult(result);
+                    // Format the result for display
+                    String displayContent = formatResourceResult(result);
 
-                Platform.runLater(() -> {
-                    // Add to history and display
-                    resourceHistory.navigateTo(uri, displayContent);
-                    displayResourceContent(uri, displayContent);
-                    updateBackButtonState();
-                });
+                    Platform.runLater(() -> {
+                        // Add to history and display
+                        resourceHistory.navigateTo(uri, displayContent);
+                        displayResourceContent(uri, displayContent);
+                        updateBackButtonState();
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Resource read failed: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    showError("Resource read failed: " + e.getMessage());
-                    navigableResourceView.setContent("Error: " + e.getMessage());
-                    resourceBreadcrumb.setText("Error loading: " + uri);
-                });
-            } finally {
+                } catch (Exception e) {
+                    LOG.error("Resource read failed: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        showError("Resource read failed: " + e.getMessage());
+                        navigableResourceView.setContent("Error: " + e.getMessage());
+                        resourceBreadcrumb.setText("Error loading: " + uri);
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            readThread.setDaemon(true);
+            readThread.start();
+            started = true;
+        } finally {
+            if (!started) {
                 endRequest();
             }
-        });
-        readThread.setDaemon(true);
-        readThread.start();
+        }
     }
 
     /**
@@ -662,40 +687,51 @@ public class McpClientController {
         if (!beginRequest()) {
             return;
         }
-        resultArea.setText("Executing...");
+        // Once the background thread starts, its finally owns endRequest();
+        // until then, anything that throws must not leave the in-flight gate
+        // stuck closed
+        boolean started = false;
+        try {
+            resultArea.setText("Executing...");
 
-        // Collect arguments
-        Map<String, Object> arguments = formBuilder.collectArguments(argumentFields, valueParser);
+            // Collect arguments
+            Map<String, Object> arguments = formBuilder.collectArguments(argumentFields, valueParser);
 
-        // Execute in background (daemon thread)
-        Thread executeThread = new Thread(() -> {
-            try {
-                CallToolResult result = mcpService.executeTool(selectedTool.name(), arguments);
+            // Execute in background (daemon thread)
+            Thread executeThread = new Thread(() -> {
+                try {
+                    CallToolResult result = mcpService.executeTool(selectedTool.name(), arguments);
 
-                // Apply JSON decoding transformation if enabled
-                Object displayResult = decodeJsonCheckBox.isSelected()
-                    ? decodeJsonInResult(result)
-                    : result;
+                    // Apply JSON decoding transformation if enabled
+                    Object displayResult = decodeJsonCheckBox.isSelected()
+                        ? decodeJsonInResult(result)
+                        : result;
 
-                // Pretty print result
-                String prettyResult = MAPPER.writerWithDefaultPrettyPrinter()
-                        .writeValueAsString(displayResult);
+                    // Pretty print result
+                    String prettyResult = MAPPER.writerWithDefaultPrettyPrinter()
+                            .writeValueAsString(displayResult);
 
-                Platform.runLater(() -> {
-                    resultArea.setText(prettyResult);
-                });
+                    Platform.runLater(() -> {
+                        resultArea.setText(prettyResult);
+                    });
 
-            } catch (Exception e) {
-                LOG.error("Error executing tool: {}", e.getMessage(), e);
-                Platform.runLater(() -> {
-                    resultArea.setText("Error: " + e.getMessage());
-                });
-            } finally {
+                } catch (Exception e) {
+                    LOG.error("Error executing tool: {}", e.getMessage(), e);
+                    Platform.runLater(() -> {
+                        resultArea.setText("Error: " + e.getMessage());
+                    });
+                } finally {
+                    endRequest();
+                }
+            });
+            executeThread.setDaemon(true);
+            executeThread.start();
+            started = true;
+        } finally {
+            if (!started) {
                 endRequest();
             }
-        });
-        executeThread.setDaemon(true);
-        executeThread.start();
+        }
     }
 
     private void updateConnectionState(boolean connected) {
