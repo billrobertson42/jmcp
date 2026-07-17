@@ -146,6 +146,21 @@ class JdbcDriverClassManagerTest {
     }
 
     @Test
+    void knownDriversResourceProvidesAllSupportedTypes() throws Exception {
+        // Mutant killed: a database type dropped (or its key renamed) during the
+        // migration of the driver definitions to known_drivers.json, or the
+        // resource failing to load at all. Every type a config file may name
+        // must resolve to a non-empty artifact list whose first entry is a
+        // plausible driver artifact.
+        var manager = new JdbcDriverClassManager(cacheDir);
+        for (String type : List.of("postgresql", "mysql", "mariadb", "oracle",
+                "sqlserver", "h2", "sqlite")) {
+            List<MavenCoordinates> artifacts = manager.getKnownDriver(type);
+            assertFalse(artifacts.isEmpty(), "type '" + type + "' must define artifacts");
+        }
+    }
+
+    @Test
     void sqlServerDriverIncludesMsal4jCompanion() throws Exception {
         // Mutant killed: dropping the companion artifact from the sqlserver
         // entry - Azure AD auth needs msal4j on the driver's classpath, and

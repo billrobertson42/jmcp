@@ -19,6 +19,8 @@ package org.peacetalk.jmcp.jdbc.driver;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.peacetalk.jmcp.jdbc.ProxyConfig;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,6 +39,7 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.Driver;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -55,22 +58,14 @@ public class JdbcDriverClassManager {
         new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2");
 
     /**
-     * Artifacts per database type. The first entry is the JDBC driver itself;
-     * any further entries are companion jars the driver needs on its classpath.
-     * sqlserver ships msal4j so Azure AD authentication works out of the box
-     * (Azure SQL and plain SQL Server are deliberately the same type).
+     * Classpath resource defining the artifacts for each known database type:
+     * a JSON object mapping type → array of {@code groupId:artifactId:version}
+     * strings. The first entry is the JDBC driver itself; any further entries
+     * are companion jars the driver needs on its classpath (e.g. sqlserver
+     * ships msal4j so Azure AD authentication works out of the box — Azure SQL
+     * and plain SQL Server are deliberately the same type).
      */
-    private static final Map<String, List<MavenCoordinates>> KNOWN_DRIVERS = Map.ofEntries(
-        Map.entry("postgresql", List.of(new MavenCoordinates("org.postgresql", "postgresql", "42.7.8"))),
-        Map.entry("mysql", List.of(new MavenCoordinates("com.mysql", "mysql-connector-j", "9.5.0"))),
-        Map.entry("mariadb", List.of(new MavenCoordinates("org.mariadb.jdbc", "mariadb-java-client", "3.5.7"))),
-        Map.entry("oracle", List.of(new MavenCoordinates("com.oracle.database.jdbc", "ojdbc11", "23.7.0.25.01"))),
-        Map.entry("sqlserver", List.of(
-            new MavenCoordinates("com.microsoft.sqlserver", "mssql-jdbc", "13.2.1.jre11"),
-            new MavenCoordinates("com.microsoft.azure", "msal4j", "1.25.0"))),
-        Map.entry("h2", List.of(new MavenCoordinates("com.h2database", "h2", "2.4.240"))),
-        Map.entry("sqlite", List.of(new MavenCoordinates("org.xerial", "sqlite-jdbc", "3.51.1.0")))
-    );
+    static final String KNOWN_DRIVERS_RESOURCE = "/known_drivers.json";
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration JAR_REQUEST_TIMEOUT = Duration.ofSeconds(120);
@@ -88,6 +83,7 @@ public class JdbcDriverClassManager {
     private final String repoBaseUrl;
     private final HttpClient httpClient;
     private final Map<String, DriverClassLoader> loadedDrivers;
+    private final Map<String, List<MavenCoordinates>> knownDrivers;
 
     public JdbcDriverClassManager(Path driverCacheDir) throws IOException {
         this(driverCacheDir, MavenCoordinates.MAVEN_CENTRAL_BASE);
@@ -101,6 +97,7 @@ public class JdbcDriverClassManager {
         this.driverCacheDir = driverCacheDir;
         this.repoBaseUrl = repoBaseUrl.endsWith("/") ? repoBaseUrl : repoBaseUrl + "/";
         this.loadedDrivers = new ConcurrentHashMap<>();
+        this.knownDrivers = loadKnownDrivers();
         Files.createDirectories(driverCacheDir);
 
         HttpClient.Builder builder = HttpClient.newBuilder()
@@ -114,11 +111,43 @@ public class JdbcDriverClassManager {
     }
 
     /**
+     * Load the known-driver definitions from {@link #KNOWN_DRIVERS_RESOURCE}.
+     * The file ships inside the jmcp-jdbc jar, so any failure here is a build
+     * or packaging defect — fail loudly rather than start with no drivers.
+     */
+    private static Map<String, List<MavenCoordinates>> loadKnownDrivers() throws IOException {
+        try (InputStream in = JdbcDriverClassManager.class.getResourceAsStream(KNOWN_DRIVERS_RESOURCE)) {
+            if (in == null) {
+                throw new IOException("Driver definition resource not found: " + KNOWN_DRIVERS_RESOURCE);
+            }
+            JsonNode root = new ObjectMapper().readTree(in);
+            Map<String, List<MavenCoordinates>> drivers = new HashMap<>();
+            for (Map.Entry<String, JsonNode> entry : root.properties()) {
+                JsonNode gavArray = entry.getValue();
+                if (!gavArray.isArray() || gavArray.isEmpty()) {
+                    throw new IOException("Driver definition for '" + entry.getKey()
+                        + "' in " + KNOWN_DRIVERS_RESOURCE + " must be a non-empty array of "
+                        + "groupId:artifactId:version strings");
+                }
+                List<MavenCoordinates> artifacts = new ArrayList<>();
+                for (int i = 0; i < gavArray.size(); i++) {
+                    artifacts.add(MavenCoordinates.parse(gavArray.get(i).asString()));
+                }
+                drivers.put(entry.getKey(), List.copyOf(artifacts));
+            }
+            return Map.copyOf(drivers);
+        } catch (IllegalArgumentException e) {
+            throw new IOException("Invalid driver definition in " + KNOWN_DRIVERS_RESOURCE
+                + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Get the known artifacts for a database type. The first entry is the JDBC
      * driver; any further entries are companion jars.
      */
     public List<MavenCoordinates> getKnownDriver(String databaseType) {
-        List<MavenCoordinates> artifacts = KNOWN_DRIVERS.get(databaseType.toLowerCase());
+        List<MavenCoordinates> artifacts = knownDrivers.get(databaseType.toLowerCase());
         if (artifacts == null) {
             throw new IllegalArgumentException("Unknown database type: " + databaseType);
         }

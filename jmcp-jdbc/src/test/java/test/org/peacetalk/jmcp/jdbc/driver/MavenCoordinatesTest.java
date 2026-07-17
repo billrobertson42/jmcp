@@ -17,10 +17,14 @@
 package test.org.peacetalk.jmcp.jdbc.driver;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.peacetalk.jmcp.jdbc.driver.MavenCoordinates;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
@@ -80,6 +84,36 @@ class MavenCoordinatesTest {
         assertEquals("https://repo1.maven.org/maven2/" + coords.toPath(),
             coords.getMavenCentralUrl());
         assertTrue(coords.getMavenCentralUrl().endsWith(coords.toPath()));
+    }
+
+    @Test
+    void parseSplitsGavIntoComponents() {
+        // Mutant killed: the three parts assigned to the wrong record components
+        // (e.g. artifactId/version swapped) - each field is asserted by value.
+        MavenCoordinates coords = MavenCoordinates.parse("com.microsoft.azure:msal4j:1.25.0");
+        assertEquals("com.microsoft.azure", coords.groupId());
+        assertEquals("msal4j", coords.artifactId());
+        assertEquals("1.25.0", coords.version());
+    }
+
+    // Mutant killed: dropping the part-count/blank validation, which would turn
+    // malformed known_drivers.json entries into garbage coordinates (and 404
+    // downloads) instead of a load-time error naming the bad string.
+    @ParameterizedTest(name = "[{index}] \"{0}\"")
+    @NullSource
+    @ValueSource(strings = {
+        "",
+        "just-an-artifact",
+        "group:artifact",                       // missing version
+        "group:artifact:version:classifier",    // too many parts
+        "group::version",                       // blank artifact
+        ":artifact:version"                     // blank group
+    })
+    void parseRejectsMalformedGav(String gav) {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+            () -> MavenCoordinates.parse(gav));
+        assertTrue(ex.getMessage().contains("groupId:artifactId:version"),
+            "error must state the expected format: " + ex.getMessage());
     }
 
     @Test
