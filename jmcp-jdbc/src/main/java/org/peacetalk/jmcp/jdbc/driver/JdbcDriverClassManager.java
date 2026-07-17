@@ -54,11 +54,14 @@ public class JdbcDriverClassManager {
     private static final Logger LOG = LogManager.getLogger(JdbcDriverClassManager.class);
 
     // HikariCP version to use with all drivers (6.x for Java 11+, 7.x requires
-    // Java 21+). Unpinned: verified via the repository checksum, because the
-    // localhost-repo tests serve fake bytes that a real pin would reject.
-    // Pinning it would need a test seam for the hikari artifact - see STATUS.md.
-    private static final DriverArtifact HIKARI_CP = DriverArtifact.unpinned(
-        new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2"));
+    // Java 21+). Pinned like the known drivers; computed with
+    // scripts/update-driver-pins.sh and cross-checked against the repository's
+    // published .sha1 at pin time. Overridable via the 3-arg constructor so
+    // tests can substitute an unpinned artifact matching a fake repository's
+    // synthetic bytes, which could never satisfy this real pin.
+    private static final DriverArtifact HIKARI_CP = new DriverArtifact(
+        new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2"),
+        "f1e612fa27345be3107a85431e8a8aeb205c15364ab2f2d411e40a9d7bb08095");
 
     /**
      * Classpath resource defining the artifacts for each known database type:
@@ -88,6 +91,7 @@ public class JdbcDriverClassManager {
 
     private final Path driverCacheDir;
     private final String repoBaseUrl;
+    private final DriverArtifact hikariCp;
     private final HttpClient httpClient;
     private final Map<String, DriverClassLoader> loadedDrivers;
     private final Map<String, List<DriverArtifact>> knownDrivers;
@@ -101,8 +105,23 @@ public class JdbcDriverClassManager {
      * Exists so tests can point at a local HTTP server instead of Maven Central.
      */
     public JdbcDriverClassManager(Path driverCacheDir, String repoBaseUrl) throws IOException {
+        this(driverCacheDir, repoBaseUrl, HIKARI_CP);
+    }
+
+    /**
+     * Creates a manager pointed at an alternate repository base URL, with a
+     * substituted HikariCP artifact. Exists so tests can override the shipped
+     * pin: {@link #HIKARI_CP}'s pin is computed from HikariCP's real published
+     * jar, which a fake repository serving synthetic bytes cannot satisfy — a
+     * test pointed at such a repository should pass
+     * {@code DriverArtifact.unpinned(...)} here instead of skipping
+     * verification globally.
+     */
+    public JdbcDriverClassManager(Path driverCacheDir, String repoBaseUrl, DriverArtifact hikariCp)
+            throws IOException {
         this.driverCacheDir = driverCacheDir;
         this.repoBaseUrl = repoBaseUrl.endsWith("/") ? repoBaseUrl : repoBaseUrl + "/";
+        this.hikariCp = hikariCp;
         this.loadedDrivers = new ConcurrentHashMap<>();
         this.knownDrivers = loadKnownDrivers();
         Files.createDirectories(driverCacheDir);
@@ -225,7 +244,7 @@ public class JdbcDriverClassManager {
                 for (DriverArtifact artifact : artifacts) {
                     jarPaths.add(downloadDriver(artifact));
                 }
-                jarPaths.add(downloadDriver(HIKARI_CP));
+                jarPaths.add(downloadDriver(hikariCp));
                 return new DriverClassLoader(jarPaths);
             } catch (Exception e) {
                 throw new RuntimeException("Failed to load driver: " + artifacts, e);

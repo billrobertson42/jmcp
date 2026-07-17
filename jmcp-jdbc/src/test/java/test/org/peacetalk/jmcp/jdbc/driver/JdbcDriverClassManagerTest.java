@@ -51,10 +51,32 @@ class JdbcDriverClassManagerTest {
     private static final MavenCoordinates OTHER_FAKE_DRIVER =
         new MavenCoordinates("com.example", "other-driver", "2.0");
 
+    /**
+     * HikariCP's real coordinates. {@link #loadH2DriverFromMavenCentral} proves
+     * the shipped pin is correct by downloading the real jar over the network.
+     * The fake repository below serves the same bytes for any *.jar path
+     * regardless of artifact, so tests against it must override the pin -
+     * see {@link #newManager}.
+     */
+    private static final MavenCoordinates HIKARI_COORDINATES =
+        new MavenCoordinates("com.zaxxer", "HikariCP", "7.0.2");
+
     private static final byte[] JAR_BYTES = "fake jar bytes for download tests".getBytes();
 
     @TempDir
     Path cacheDir;
+
+    /**
+     * A manager pointed at a fake repository, with HikariCP's pin overridden
+     * to unpinned (repository-checksum verified). Not a global bypass: the
+     * production constructors (used everywhere else in this file, including
+     * the real-network test) always carry the real shipped pin - see
+     * JdbcDriverClassManager's 3-arg constructor javadoc.
+     */
+    private JdbcDriverClassManager newManager(String repoBaseUrl) throws IOException {
+        return new JdbcDriverClassManager(cacheDir, repoBaseUrl,
+            DriverArtifact.unpinned(HIKARI_COORDINATES));
+    }
 
     // ------------------------------------------------------------------
     // Local repository server (no external network)
@@ -221,7 +243,7 @@ class JdbcDriverClassManagerTest {
         // .part file left behind, and — via the .sha1 request assertion —
         // verification being skipped entirely.
         serveJarsWithValidChecksums();
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
 
         var loader = manager.loadDriver(FAKE_DRIVER);
         try {
@@ -246,7 +268,7 @@ class JdbcDriverClassManagerTest {
         String upper = sha1Of(JAR_BYTES).toUpperCase();
         responder = path -> path.endsWith(".jar.sha1") ? upper.getBytes()
             : path.endsWith(".jar") ? JAR_BYTES.clone() : null;
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
 
         var loader = manager.loadDriver(FAKE_DRIVER);
         try {
@@ -262,7 +284,7 @@ class JdbcDriverClassManagerTest {
         // Mutants killed: statusCode() != 200 check removed (a 404 HTML body would
         // be cached and loaded as a jar), and error bodies surviving in the cache.
         responder = path -> null; // 404 for everything
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
 
         RuntimeException ex = assertThrows(RuntimeException.class,
             () -> manager.loadDriver(FAKE_DRIVER));
@@ -282,7 +304,7 @@ class JdbcDriverClassManagerTest {
         String wrongSha1 = sha1Of("completely different bytes".getBytes());
         responder = path -> path.endsWith(".jar.sha1") ? wrongSha1.getBytes()
             : path.endsWith(".jar") ? JAR_BYTES.clone() : null;
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
 
         RuntimeException ex = assertThrows(RuntimeException.class,
             () -> manager.loadDriver(FAKE_DRIVER));
@@ -298,7 +320,7 @@ class JdbcDriverClassManagerTest {
         // Mutant killed: treating a failed .sha1 fetch as "skip verification"
         // instead of failing closed.
         responder = path -> path.endsWith(".jar") ? JAR_BYTES.clone() : null;
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
 
         RuntimeException ex = assertThrows(RuntimeException.class,
             () -> manager.loadDriver(FAKE_DRIVER));
@@ -317,13 +339,13 @@ class JdbcDriverClassManagerTest {
         // the second manager would hit the 404-only responder and fail.
         serveJarsWithValidChecksums();
         String baseUrl = startRepo();
-        var first = new JdbcDriverClassManager(cacheDir, baseUrl);
+        var first = newManager(baseUrl);
         first.loadDriver(FAKE_DRIVER);
         first.unloadDriver(FAKE_DRIVER);
 
         responder = path -> null; // any further download attempt would fail
         requestedPaths.clear();
-        var second = new JdbcDriverClassManager(cacheDir, baseUrl);
+        var second = newManager(baseUrl);
         var loader = second.loadDriver(FAKE_DRIVER);
         try {
             assertEquals(List.of(), requestedPaths,
@@ -340,7 +362,7 @@ class JdbcDriverClassManagerTest {
         // (different coordinates must not share a loader), and unloadDriver not
         // evicting (reload after unload must build a fresh loader).
         serveJarsWithValidChecksums();
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
         try {
             var loader = manager.loadDriver(FAKE_DRIVER);
             assertSame(loader, manager.loadDriver(FAKE_DRIVER),
@@ -364,7 +386,7 @@ class JdbcDriverClassManagerTest {
         // artifacts (a single-jar load of the same first artifact must get a
         // DIFFERENT classloader than the multi-jar load).
         serveJarsWithValidChecksums();
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
         List<MavenCoordinates> pair = List.of(FAKE_DRIVER, OTHER_FAKE_DRIVER);
         try {
             var pairLoader = manager.loadDriver(pair);
@@ -395,7 +417,7 @@ class JdbcDriverClassManagerTest {
         // but the .sha1 request assertion fails. The pin makes the repository
         // checksum irrelevant for this artifact.
         serveJarsWithValidChecksums();
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
         var pinned = List.of(new DriverArtifact(FAKE_DRIVER, sha256Of(JAR_BYTES)));
         try {
             manager.loadDriverArtifacts(pinned);
@@ -414,7 +436,7 @@ class JdbcDriverClassManagerTest {
         // match its pin must never reach the cache, even though the repository's
         // own checksum for it is valid.
         serveJarsWithValidChecksums();
-        var manager = new JdbcDriverClassManager(cacheDir, startRepo());
+        var manager = newManager(startRepo());
         String wrongPin = sha256Of("completely different bytes".getBytes());
 
         RuntimeException ex = assertThrows(RuntimeException.class,
@@ -500,6 +522,12 @@ class JdbcDriverClassManagerTest {
         // Real-world smoke test: kills mutants in URL construction and .sha1
         // parsing that only a real repository exposes (actual checksum file
         // format, redirects), and proves the downloaded jar is a loadable driver.
+        //
+        // This uses the 1-arg constructor, so HikariCP downloads with its real
+        // shipped pin (HIKARI_CP, not a test override) - loading ANY driver
+        // through this constructor also verifies that pin against the actual
+        // HikariCP-7.0.2.jar on Maven Central, which is the only place that pin
+        // can be proven correct (a fake repository cannot serve matching bytes).
         var manager = new JdbcDriverClassManager(cacheDir);
         var loader = manager.loadDriver("h2");
         try {
@@ -514,6 +542,11 @@ class JdbcDriverClassManagerTest {
             MavenCoordinates h2 = manager.getKnownDriver("h2").get(0).coordinates();
             Path cachedJar = cacheDir.resolve(h2.artifactId() + "-" + h2.version() + ".jar");
             assertTrue(Files.exists(cachedJar), "verified jar must be cached at " + cachedJar);
+
+            Path cachedHikari = cacheDir.resolve(
+                HIKARI_COORDINATES.artifactId() + "-" + HIKARI_COORDINATES.version() + ".jar");
+            assertTrue(Files.exists(cachedHikari),
+                "HikariCP must download and verify against its real shipped pin: " + cachedHikari);
         } finally {
             manager.unloadDriver("h2");
         }
