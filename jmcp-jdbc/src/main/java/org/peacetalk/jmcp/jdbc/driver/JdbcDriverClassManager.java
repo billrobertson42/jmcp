@@ -101,8 +101,11 @@ public class JdbcDriverClassManager {
     }
 
     /**
-     * Creates a manager that downloads from an alternate repository base URL.
-     * Exists so tests can point at a local HTTP server instead of Maven Central.
+     * Creates a manager that downloads from an alternate repository base URL,
+     * e.g. a Maven Central mirror serving the same artifacts (the shipped
+     * HikariCP pin still applies and must match). A test pointed at a fake
+     * repository serving synthetic bytes cannot satisfy that pin — use the
+     * 3-arg constructor to substitute the HikariCP artifact instead.
      */
     public JdbcDriverClassManager(Path driverCacheDir, String repoBaseUrl) throws IOException {
         this(driverCacheDir, repoBaseUrl, HIKARI_CP);
