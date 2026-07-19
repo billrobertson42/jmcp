@@ -80,6 +80,9 @@ final class RelationshipGraphBuilder {
      */
     record Graph(List<Relationship> relationships, List<String> copyOrder, List<String> cyclesDetected) {}
 
+    /** One row of a getImportedKeys/getExportedKeys result, grouped by FK_NAME. */
+    private record FkRow(String column, String otherSchema, String otherTable, String otherColumn) {}
+
     private RelationshipGraphBuilder() {}
 
     /**
@@ -160,32 +163,26 @@ final class RelationshipGraphBuilder {
                                           String schema, String table, String schemaNameFilter,
                                           List<Relationship> relationships,
                                           Map<String, Set<String>> dependencyGraph) throws SQLException {
-        record Row(String fkColumn, String pkSchema, String pkTable, String pkColumn) {}
-
-        LinkedHashMap<String, List<Row>> groups = new LinkedHashMap<>();
+        LinkedHashMap<String, List<FkRow>> groups = new LinkedHashMap<>();
         try (ResultSet fkRs = metaData.getImportedKeys(null, schema, table)) {
             while (fkRs.next()) {
                 String fkName = fkRs.getString("FK_NAME");
                 if (fkName == null) continue;
-                groups.computeIfAbsent(fkName, k -> new ArrayList<>()).add(new Row(
-                        fkRs.getString("FKCOLUMN_NAME"),
-                        fkRs.getString("PKTABLE_SCHEM"),
-                        fkRs.getString("PKTABLE_NAME"),
-                        fkRs.getString("PKCOLUMN_NAME")
-                ));
+                groups.computeIfAbsent(fkName, k -> new ArrayList<>()).add(new FkRow(
+                        fkRs.getString("FKCOLUMN_NAME"), fkRs.getString("PKTABLE_SCHEM"),
+                        fkRs.getString("PKTABLE_NAME"), fkRs.getString("PKCOLUMN_NAME")));
             }
         }
 
         String fromQualified = schema + "." + table;
-        for (Map.Entry<String, List<Row>> entry : groups.entrySet()) {
-            List<Row> rows = entry.getValue();
-            Row first = rows.get(0);
-            String pkSchema = first.pkSchema();
-            String pkTable = first.pkTable();
+        for (Map.Entry<String, List<FkRow>> entry : groups.entrySet()) {
+            List<FkRow> rows = entry.getValue();
+            String pkSchema = rows.get(0).otherSchema();
+            String pkTable = rows.get(0).otherTable();
 
             List<ColumnMapping> mappings = new ArrayList<>();
-            for (Row row : rows) {
-                mappings.add(new ColumnMapping(row.fkColumn(), row.pkColumn()));
+            for (FkRow row : rows) {
+                mappings.add(new ColumnMapping(row.column(), row.otherColumn()));
             }
 
             relationships.add(new Relationship(
@@ -213,27 +210,21 @@ final class RelationshipGraphBuilder {
     private static void walkExportedKeys(DatabaseMetaData metaData, String connectionId,
                                           String schema, String table, String schemaNameFilter,
                                           List<Relationship> relationships) throws SQLException {
-        record Row(String fkColumn, String fkSchema, String fkTable, String pkColumn) {}
-
-        LinkedHashMap<String, List<Row>> groups = new LinkedHashMap<>();
+        LinkedHashMap<String, List<FkRow>> groups = new LinkedHashMap<>();
         try (ResultSet fkRs = metaData.getExportedKeys(null, schema, table)) {
             while (fkRs.next()) {
                 String fkName = fkRs.getString("FK_NAME");
                 if (fkName == null) continue;
-                groups.computeIfAbsent(fkName, k -> new ArrayList<>()).add(new Row(
-                        fkRs.getString("FKCOLUMN_NAME"),
-                        fkRs.getString("FKTABLE_SCHEM"),
-                        fkRs.getString("FKTABLE_NAME"),
-                        fkRs.getString("PKCOLUMN_NAME")
-                ));
+                groups.computeIfAbsent(fkName, k -> new ArrayList<>()).add(new FkRow(
+                        fkRs.getString("FKCOLUMN_NAME"), fkRs.getString("FKTABLE_SCHEM"),
+                        fkRs.getString("FKTABLE_NAME"), fkRs.getString("PKCOLUMN_NAME")));
             }
         }
 
-        for (Map.Entry<String, List<Row>> entry : groups.entrySet()) {
-            List<Row> rows = entry.getValue();
-            Row first = rows.get(0);
-            String fkSchema = first.fkSchema();
-            String fkTable = first.fkTable();
+        for (Map.Entry<String, List<FkRow>> entry : groups.entrySet()) {
+            List<FkRow> rows = entry.getValue();
+            String fkSchema = rows.get(0).otherSchema();
+            String fkTable = rows.get(0).otherTable();
 
             // The referencing table is also in this schema: already captured via
             // its own walkImportedKeys call above.
@@ -242,10 +233,10 @@ final class RelationshipGraphBuilder {
             }
 
             List<ColumnMapping> mappings = new ArrayList<>();
-            for (Row row : rows) {
+            for (FkRow row : rows) {
                 // Reversed relative to walkImportedKeys's convention -- existing
                 // behavior, preserved as-is. See class javadoc.
-                mappings.add(new ColumnMapping(row.pkColumn(), row.fkColumn()));
+                mappings.add(new ColumnMapping(row.otherColumn(), row.column()));
             }
 
             relationships.add(new Relationship(
