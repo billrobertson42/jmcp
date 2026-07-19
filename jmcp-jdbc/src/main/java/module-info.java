@@ -17,6 +17,7 @@
 module org.peacetalk.jmcp.jdbc {
     requires org.peacetalk.jmcp.core;
     requires java.sql;
+    requires java.net.http;
     requires tools.jackson.databind;
     requires net.sf.jsqlparser;
     requires org.apache.logging.log4j;

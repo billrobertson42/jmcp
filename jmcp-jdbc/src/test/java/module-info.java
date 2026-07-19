@@ -18,6 +18,7 @@ open module org.peacetalk.jmcp.jdbc.test {
     requires org.peacetalk.jmcp.core;
     requires org.peacetalk.jmcp.jdbc;
     requires java.sql;
+    requires jdk.httpserver;
     requires tools.jackson.databind;
     requires org.junit.jupiter.api;
     requires org.junit.jupiter.params;

@@ -24,12 +24,30 @@ public record MavenCoordinates(
     String artifactId,
     String version
 ) {
+    /** Base URL of the Maven Central repository. */
+    public static final String MAVEN_CENTRAL_BASE = "https://repo1.maven.org/maven2/";
+
+    /**
+     * Parse compact {@code groupId:artifactId:version} coordinates.
+     *
+     * @throws IllegalArgumentException if the string is not exactly three
+     *         non-blank colon-separated parts
+     */
+    public static MavenCoordinates parse(String gav) {
+        String[] parts = gav == null ? new String[0] : gav.split(":");
+        if (parts.length != 3 || parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) {
+            throw new IllegalArgumentException(
+                "Invalid Maven coordinates '" + gav + "': expected groupId:artifactId:version");
+        }
+        return new MavenCoordinates(parts[0], parts[1], parts[2]);
+    }
+
     public String toPath() {
         return groupId.replace('.', '/') + "/" + artifactId + "/" + version + "/" + artifactId + "-" + version + ".jar";
     }
 
     public String getMavenCentralUrl() {
-        return "https://repo1.maven.org/maven2/" + toPath();
+        return MAVEN_CENTRAL_BASE + toPath();
     }
 
     @Override

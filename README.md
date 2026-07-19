@@ -164,19 +164,27 @@ environment variables — no changes to the config file are needed.
 
 **Java system properties** (pass on the command line or in `run.sh`):
 ```
--Dhttp.proxyHost=proxy.example.com
--Dhttp.proxyPort=8080
+-Dhttps.proxyHost=proxy.example.com
+-Dhttps.proxyPort=8080
 ```
+Downloads use HTTPS, so `https.proxyHost`/`https.proxyPort` are the standard
+properties. `http.proxyHost`/`http.proxyPort` are also honored for
+compatibility.
 
-**Environment variables** (upper- or lower-case are both accepted):
+**Environment variables** (upper- or lower-case are both accepted; the value
+must be `http(s)://host[:port]`, port defaults to 80):
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 # or
 export http_proxy=http://proxy.example.com:8080
 ```
 
-Resolution order: system properties take precedence over environment variables.
-`HTTP_PROXY` is checked before `HTTPS_PROXY`.
+Resolution order: `https.proxyHost`, then `http.proxyHost`, then `HTTP_PROXY`,
+then `HTTPS_PROXY`. System properties always take precedence over environment
+variables.
+
+Proxies that require credentials (`http://user:pass@host:port`) are not
+supported; such a value is ignored and a warning is logged.
 
 ### Fail-fast initialization
 

@@ -1,18 +1,43 @@
 package org.peacetalk.jmcp.jdbc;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Provides HTTP proxy configuration by resolving proxy settings from Java system
- * properties ({@code http.proxyHost}, {@code http.proxyPort}) or, as a fallback,
- * from the {@code HTTP_PROXY} / {@code HTTPS_PROXY} environment variables.
+ * Supplies the HTTP proxy override for {@code java.net.http.HttpClient}.
+ *
+ * <p>The JDK's default {@link ProxySelector} (used by {@code HttpClient} when no
+ * explicit selector is set) applies system properties <em>per protocol</em>: it
+ * consults {@code https.proxyHost} for the https URLs this client fetches, and
+ * {@code http.proxyHost} only for plain-http URLs. This class covers the two
+ * conventions the default selector would miss for https traffic:
+ * {@code http.proxyHost}/{@code http.proxyPort} (honored by the pre-HttpClient
+ * implementation, so kept for compatibility) and the {@code HTTP_PROXY} /
+ * {@code HTTPS_PROXY} (and lower-case) environment variables.
  *
  * <p>The lookup functions for system properties and environment variables are
- * injectable, making this class easy to testable
+ * injectable, making this class easy to test.
  */
 public class ProxyConfig {
+
+    private static final Logger LOG = LogManager.getLogger(ProxyConfig.class);
+
+    /**
+     * Matches proxy env-var values of the form {@code http://host[:port][/]} or
+     * {@code https://host[:port][/]}. Group 1 is the host, group 2 the optional port.
+     */
+    private static final Pattern ENV_PROXY_URL =
+        Pattern.compile("^https?://([^:/\\s]+)(?::([0-9]+))?/?$");
+
+    /** Port assumed when the proxy env var omits one. */
+    private static final int DEFAULT_PROXY_PORT = 80;
 
     private final Function<String, String> sys;
     private final Function<String, String> env;
@@ -30,65 +55,97 @@ public class ProxyConfig {
     }
 
     /**
-     * Creates a {@code ProxyConfig} using the standard JVM system properties.
-     * This is for normal use.
-     *
+     * Creates a {@code ProxyConfig} using the standard JVM system properties
      * ({@link System#getProperty}) and environment variables ({@link System#getenv}).
+     * This is for normal use.
      */
     public ProxyConfig() {
         this(System::getProperty, System::getenv);
     }
 
     /**
-     * Returns the proxy host to use for HTTP connections.
+     * Returns the {@link ProxySelector} to install on an {@code HttpClient}, if any.
      *
      * <p>Resolution order:
      * <ol>
-     *   <li>Java system property {@code http.proxyHost}</li>
-     *   <li>Host portion parsed from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
-     *       environment variable (e.g. {@code http://proxy.example.com:8080})</li>
+     *   <li>{@code https.proxyHost} set → empty: the default selector already
+     *       applies it to this client's https URLs, and it must win over the
+     *       fallbacks below.</li>
+     *   <li>{@code http.proxyHost} set → a selector built from
+     *       {@code http.proxyHost}/{@code http.proxyPort}. The default selector
+     *       ignores these for https URLs, but the pre-HttpClient implementation
+     *       honored them, so they keep working.</li>
+     *   <li>{@code HTTP_PROXY}/{@code HTTPS_PROXY} environment variables, which
+     *       the JDK ignores entirely.</li>
+     *   <li>Nothing configured → empty (direct connections).</li>
      * </ol>
      *
-     * @return the proxy host, or {@code null} if no proxy host is configured
+     * @return the proxy selector to install, or empty to keep the client default
      */
-    public String getProxyHost() {
-        String proxyHost = sys.apply("http.proxyHost");
-        if (proxyHost == null) {
-            String fromEnv = getHttpProxyEnvVariable();
-            if (fromEnv != null) {
-                Matcher matcher = Pattern.compile("^https?://([^:]+).*$").matcher(fromEnv);
-                if (matcher.matches()) {
-                    proxyHost = matcher.group(1);
-                }
-            }
+    public Optional<ProxySelector> proxySelector() {
+        if (sys.apply("https.proxyHost") != null) {
+            return Optional.empty();
         }
-        return proxyHost;
+        Optional<InetSocketAddress> fromSysProps = sysPropProxyAddress();
+        if (fromSysProps.isPresent()) {
+            return fromSysProps.map(ProxySelector::of);
+        }
+        return envProxyAddress().map(ProxySelector::of);
     }
 
     /**
-     * Returns the proxy port to use for HTTP connections.
+     * Parses the proxy address from the {@code http.proxyHost} /
+     * {@code http.proxyPort} system properties. A missing port defaults to
+     * {@value #DEFAULT_PROXY_PORT}; a non-numeric port yields empty.
      *
-     * <p>Resolution order:
-     * <ol>
-     *   <li>Java system property {@code http.proxyPort}</li>
-     *   <li>Port portion parsed from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
-     *       environment variable (e.g. {@code http://proxy.example.com:8080})</li>
-     * </ol>
-     *
-     * @return the proxy port as a string, or {@code null} if no proxy port is configured
+     * @return the unresolved proxy address, or empty if {@code http.proxyHost}
+     *         is not set or the port is unparseable
      */
-    public String getProxyPort() {
-        String proxyPort = sys.apply("http.proxyPort");
-        if (proxyPort == null) {
-            String fromEnv = getHttpProxyEnvVariable();
-            if (fromEnv != null) {
-                Matcher matcher = Pattern.compile("^https?://[^:]+:([0-9]+)$").matcher(fromEnv);
-                if (matcher.matches()) {
-                    proxyPort = matcher.group(1);
-                }
+    public Optional<InetSocketAddress> sysPropProxyAddress() {
+        String host = sys.apply("http.proxyHost");
+        if (host == null || host.isBlank()) {
+            return Optional.empty();
+        }
+        String portStr = sys.apply("http.proxyPort");
+        int port = DEFAULT_PROXY_PORT;
+        if (portStr != null) {
+            try {
+                port = Integer.parseInt(portStr.trim());
+            } catch (NumberFormatException e) {
+                LOG.warn("Ignoring proxy system properties: http.proxyPort '{}' is not a number",
+                    portStr);
+                return Optional.empty();
             }
         }
-        return proxyPort;
+        return Optional.of(InetSocketAddress.createUnresolved(host, port));
+    }
+
+    /**
+     * Parses the proxy address from the {@code HTTP_PROXY} / {@code HTTPS_PROXY}
+     * environment variables (upper- or lower-case). A value without an explicit
+     * port defaults to port {@value #DEFAULT_PROXY_PORT}; a value that is not an
+     * {@code http(s)://host[:port]} URL yields empty.
+     *
+     * @return the unresolved proxy address, or empty if none is configured
+     */
+    public Optional<InetSocketAddress> envProxyAddress() {
+        String fromEnv = getHttpProxyEnvVariable();
+        if (fromEnv == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = ENV_PROXY_URL.matcher(fromEnv);
+        if (!matcher.matches()) {
+            // Without this, a set-but-unsupported proxy variable silently
+            // degrades to a direct connection, which in a proxied network
+            // surfaces only as a mystifying connect timeout.
+            LOG.warn("Ignoring proxy environment variable '{}': not in the supported "
+                + "http(s)://host[:port] format (credentialed proxies, e.g. "
+                + "http://user:pass@host:port, are not supported)", fromEnv);
+            return Optional.empty();
+        }
+        String host = matcher.group(1);
+        int port = matcher.group(2) != null ? Integer.parseInt(matcher.group(2)) : DEFAULT_PROXY_PORT;
+        return Optional.of(InetSocketAddress.createUnresolved(host, port));
     }
 
     /**
@@ -99,11 +156,11 @@ public class ProxyConfig {
      *         variable is set
      */
     public String getHttpProxyEnvVariable() {
-        String http_proxy =  getenv("HTTP_PROXY");
-        if (http_proxy == null) {
-            http_proxy = getenv("HTTPS_PROXY");
+        String httpProxy = getenv("HTTP_PROXY");
+        if (httpProxy == null) {
+            httpProxy = getenv("HTTPS_PROXY");
         }
-        return http_proxy;
+        return httpProxy;
     }
 
     /**
