@@ -160,8 +160,8 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void getKnownDriverReturnsCoordinatesForType() throws Exception {
-        // Mutant killed: KNOWN_DRIVERS entry for "h2" pointing at the wrong
-        // groupId/artifactId, or the lookup ignoring its key.
+        // Would fail if the KNOWN_DRIVERS entry for "h2" pointed at the wrong
+        // groupId/artifactId, or the lookup ignored its key.
         var manager = new JdbcDriverClassManager(cacheDir);
         List<DriverArtifact> h2 = manager.getKnownDriver("h2");
         assertEquals(1, h2.size(), "h2 is a single-jar driver");
@@ -171,10 +171,10 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void everyShippedDriverArtifactIsPinned() throws Exception {
-        // Mutant killed: a pin dropped from (or never added to) an entry in the
-        // shipped known_drivers.json - the whole point of pinning is that every
-        // artifact the server can download out of the box is covered. When
-        // adding a new driver, run scripts/update-driver-pins.sh.
+        // Would fail if a pin were dropped from (or never added to) an entry in
+        // the shipped known_drivers.json - the whole point of pinning is that
+        // every artifact the server can download out of the box is covered.
+        // When adding a new driver, run scripts/update-driver-pins.sh.
         var manager = new JdbcDriverClassManager(cacheDir);
         for (String type : List.of("postgresql", "mysql", "mariadb", "oracle",
                 "sqlserver", "h2", "sqlite")) {
@@ -188,9 +188,9 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void knownDriversResourceProvidesAllSupportedTypes() throws Exception {
-        // Mutant killed: a database type dropped (or its key renamed) during the
-        // migration of the driver definitions to known_drivers.json, or the
-        // resource failing to load at all. Every type a config file may name
+        // Would fail if a database type were dropped (or its key renamed) during
+        // the migration of the driver definitions to known_drivers.json, or the
+        // resource failed to load at all. Every type a config file may name
         // must resolve to a non-empty artifact list whose first entry is a
         // plausible driver artifact.
         var manager = new JdbcDriverClassManager(cacheDir);
@@ -203,7 +203,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void sqlServerDriverIncludesMsal4jCompanion() throws Exception {
-        // Mutant killed: dropping the companion artifact from the sqlserver
+        // Would fail if the companion artifact were dropped from the sqlserver
         // entry - Azure AD auth needs msal4j on the driver's classpath, and
         // the driver jar must stay first (it is what loadDriverClass resolves).
         var manager = new JdbcDriverClassManager(cacheDir);
@@ -216,15 +216,15 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void getKnownDriverIsCaseInsensitive() throws Exception {
-        // Mutant killed: dropping the toLowerCase() on the database type.
+        // Would fail if the toLowerCase() on the database type were dropped.
         var manager = new JdbcDriverClassManager(cacheDir);
         assertEquals(manager.getKnownDriver("h2"), manager.getKnownDriver("H2"));
     }
 
     @Test
     void getUnknownDriverThrowsWithType() throws Exception {
-        // Mutant killed: returning null (or a default) instead of rejecting an
-        // unknown database type.
+        // Would fail if null (or a default) were returned instead of rejecting
+        // an unknown database type.
         var manager = new JdbcDriverClassManager(cacheDir);
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
             () -> manager.getKnownDriver("unknown-db"));
@@ -238,10 +238,10 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void downloadVerifiesChecksumAndCachesJar() throws Exception {
-        // Mutants killed: checksum verification wrongly rejecting a valid download
-        // (equalsIgnoreCase negated), atomic move to the wrong file name, temp
-        // .part file left behind, and — via the .sha1 request assertion —
-        // verification being skipped entirely.
+        // Would fail if: checksum verification wrongly rejected a valid download
+        // (equalsIgnoreCase negated), the atomic move went to the wrong file name,
+        // a temp .part file were left behind, or — via the .sha1 request
+        // assertion — verification were skipped entirely.
         serveJarsWithValidChecksums();
         var manager = newManager(startRepo());
 
@@ -262,7 +262,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void uppercaseChecksumAccepted() throws Exception {
-        // Mutant killed: comparing digests with equals() instead of
+        // Would fail if digests were compared with equals() instead of
         // equalsIgnoreCase() — Maven Central digests are lowercase but the format
         // does not guarantee it.
         String upper = sha1Of(JAR_BYTES).toUpperCase();
@@ -281,8 +281,9 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void non200ResponseFailsAndCachesNothing() throws Exception {
-        // Mutants killed: statusCode() != 200 check removed (a 404 HTML body would
-        // be cached and loaded as a jar), and error bodies surviving in the cache.
+        // Would fail if: the statusCode() != 200 check were removed (a 404 HTML
+        // body would be cached and loaded as a jar), or error bodies survived
+        // in the cache.
         responder = path -> null; // 404 for everything
         var manager = newManager(startRepo());
 
@@ -299,8 +300,8 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void checksumMismatchFailsAndCachesNothing() throws Exception {
-        // Mutant killed: digest comparison negated or removed — a tampered jar
-        // must never reach the cache.
+        // Would fail if the digest comparison were negated or removed — a
+        // tampered jar must never reach the cache.
         String wrongSha1 = sha1Of("completely different bytes".getBytes());
         responder = path -> path.endsWith(".jar.sha1") ? wrongSha1.getBytes()
             : path.endsWith(".jar") ? JAR_BYTES.clone() : null;
@@ -317,7 +318,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void missingChecksumFailsClosedAndCachesNothing() throws Exception {
-        // Mutant killed: treating a failed .sha1 fetch as "skip verification"
+        // Would fail if a failed .sha1 fetch were treated as "skip verification"
         // instead of failing closed.
         responder = path -> path.endsWith(".jar") ? JAR_BYTES.clone() : null;
         var manager = newManager(startRepo());
@@ -335,7 +336,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void cachedJarSkipsDownload() throws Exception {
-        // Mutant killed: removing the Files.exists() cache-hit short-circuit —
+        // Would fail if the Files.exists() cache-hit short-circuit were removed —
         // the second manager would hit the 404-only responder and fail.
         serveJarsWithValidChecksums();
         String baseUrl = startRepo();
@@ -357,10 +358,11 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void loadDriverCachesLoaderPerCoordinates() throws Exception {
-        // Mutants killed: computeIfAbsent replaced by always-create (same
-        // coordinates must reuse the loader), cache key ignoring the coordinates
-        // (different coordinates must not share a loader), and unloadDriver not
-        // evicting (reload after unload must build a fresh loader).
+        // Would fail if: computeIfAbsent were replaced by always-create (same
+        // coordinates must reuse the loader), the cache key ignored the
+        // coordinates (different coordinates must not share a loader), or
+        // unloadDriver did not evict (reload after unload must build a fresh
+        // loader).
         serveJarsWithValidChecksums();
         var manager = newManager(startRepo());
         try {
@@ -381,8 +383,8 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void multiArtifactDriverDownloadsAllJarsIntoOneLoader() throws Exception {
-        // Mutants killed: only the first artifact downloaded (the companion jar
-        // must be cached too), and the loader cache key ignoring companion
+        // Would fail if: only the first artifact were downloaded (the companion
+        // jar must be cached too), or the loader cache key ignored companion
         // artifacts (a single-jar load of the same first artifact must get a
         // DIFFERENT classloader than the multi-jar load).
         serveJarsWithValidChecksums();
@@ -412,10 +414,10 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void correctPinVerifiesWithoutFetchingRepositoryChecksum() throws Exception {
-        // Mutant killed: ignoring the pin and falling back to the .sha1 flow -
-        // the fake repo serves a valid .sha1, so the load would still succeed,
-        // but the .sha1 request assertion fails. The pin makes the repository
-        // checksum irrelevant for this artifact.
+        // Would fail if the pin were ignored and the load fell back to the .sha1
+        // flow - the fake repo serves a valid .sha1, so the load would still
+        // succeed, but the .sha1 request assertion fails. The pin makes the
+        // repository checksum irrelevant for this artifact.
         serveJarsWithValidChecksums();
         var manager = newManager(startRepo());
         var pinned = List.of(new DriverArtifact(FAKE_DRIVER, sha256Of(JAR_BYTES)));
@@ -432,9 +434,9 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void wrongPinFailsAndCachesNothing() throws Exception {
-        // Mutant killed: pin comparison negated or removed - a jar that does not
-        // match its pin must never reach the cache, even though the repository's
-        // own checksum for it is valid.
+        // Would fail if the pin comparison were negated or removed - a jar that
+        // does not match its pin must never reach the cache, even though the
+        // repository's own checksum for it is valid.
         serveJarsWithValidChecksums();
         var manager = newManager(startRepo());
         String wrongPin = sha256Of("completely different bytes".getBytes());
@@ -450,7 +452,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void sha256HexMatchesKnownVector() throws Exception {
-        // Mutant killed: wrong algorithm behind sha256Hex. FIPS 180 test vector:
+        // Would fail if the wrong algorithm were behind sha256Hex. FIPS 180 test vector:
         // SHA-256("abc") = ba7816bf...f20015ad.
         Path file = cacheDir.resolve("vector256.bin");
         Files.write(file, "abc".getBytes());
@@ -473,8 +475,9 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void parseKnownDriversAcceptsStringAndObjectEntries() throws Exception {
-        // Mutant killed: dropping either entry form (bare string, object without
-        // pin, object with pin) or mis-mapping the gav/sha256 attributes.
+        // Would fail if either entry form were dropped (bare string, object
+        // without pin, object with pin) or the gav/sha256 attributes were
+        // mis-mapped.
         String sha = sha256Of(JAR_BYTES);
         var parsed = JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
             {"mixed": [
@@ -494,7 +497,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void parseKnownDriversRejectsMalformedSha256() {
-        // Mutant killed: dropping the pin-shape validation - a truncated pin
+        // Would fail if the pin-shape validation were dropped - a truncated pin
         // must fail at startup, not silently never match at download time.
         IOException ex = assertThrows(IOException.class,
             () -> JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
@@ -505,7 +508,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void parseKnownDriversRejectsObjectWithoutGav() {
-        // Mutant killed: accepting an entry with no coordinates.
+        // Would fail if an entry with no coordinates were accepted.
         IOException ex = assertThrows(IOException.class,
             () -> JdbcDriverClassManager.parseKnownDrivers(new ObjectMapper().readTree("""
                 {"bad": [{"sha256only": true}]}""")));
@@ -519,7 +522,7 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void loadH2DriverFromMavenCentral() throws Exception {
-        // Real-world smoke test: kills mutants in URL construction and .sha1
+        // Real-world smoke test: would fail on bugs in URL construction and .sha1
         // parsing that only a real repository exposes (actual checksum file
         // format, redirects), and proves the downloaded jar is a loadable driver.
         //
@@ -558,8 +561,9 @@ class JdbcDriverClassManagerTest {
 
     private static final String DIGEST = "a9993e364706816aba3e25717850c26c9cd0d89d";
 
-    // Mutants killed: regex not anchored on the leading token, filename/whitespace
-    // decorations breaking the parse, upper-case hex rejected.
+    // Would fail if: the regex were not anchored on the leading token,
+    // filename/whitespace decorations broke the parse, or upper-case hex were
+    // rejected.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("parseableSha1Bodies")
     void parseSha1ExtractsLeadingDigest(String description, String body, String expected) throws Exception {
@@ -576,9 +580,10 @@ class JdbcDriverClassManagerTest {
         );
     }
 
-    // Mutants killed: {40} quantifier loosened (39-char and 64-char runs must be
-    // rejected — a SHA-256 served by mistake is not a SHA-1), non-hex accepted,
-    // empty body producing a bogus digest instead of an error.
+    // Would fail if: the {40} quantifier were loosened (39-char and 64-char
+    // runs must be rejected — a SHA-256 served by mistake is not a SHA-1),
+    // non-hex were accepted, or an empty body produced a bogus digest instead
+    // of an error.
     @ParameterizedTest(name = "[{index}] \"{0}\"")
     @ValueSource(strings = {
         "",
@@ -599,8 +604,9 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void sha1HexMatchesKnownVector() throws Exception {
-        // Mutants killed: wrong algorithm (MD5/SHA-256), hex formatting of the
-        // wrong buffer, dropped bytes in the read loop. FIPS 180 test vector:
+        // Would fail if: the wrong algorithm were used (MD5/SHA-256), the wrong
+        // buffer were hex-formatted, or bytes were dropped in the read loop.
+        // FIPS 180 test vector:
         // SHA-1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d.
         Path file = cacheDir.resolve("vector.bin");
         Files.write(file, "abc".getBytes());
@@ -610,8 +616,8 @@ class JdbcDriverClassManagerTest {
 
     @Test
     void sha1HexDigestsWholeFileBeyondOneBuffer() throws Exception {
-        // Mutant killed: read loop mishandling multi-chunk files (e.g. only the
-        // first 8192-byte buffer digested). 20000 bytes forces three reads.
+        // Would fail if the read loop mishandled multi-chunk files (e.g. only
+        // the first 8192-byte buffer digested). 20000 bytes forces three reads.
         byte[] big = new byte[20000];
         for (int i = 0; i < big.length; i++) {
             big[i] = (byte) i;

@@ -28,7 +28,7 @@ class ProxyConfigTest {
     // envProxyAddress — parsing HTTP_PROXY/HTTPS_PROXY into an address
     // ------------------------------------------------------------------
 
-    // Mutants killed: wrong regex group for host/port, default port changed from 80,
+    // Would fail if: wrong regex group for host/port, default port changed from 80,
     // dropped HTTPS_PROXY fallback, dropped lowercase env-var lookup, regex accepting
     // non-http(s) schemes or garbage values.
     @ParameterizedTest(name = "[{index}] {0}")
@@ -81,7 +81,7 @@ class ProxyConfigTest {
 
     @Test
     void proxySelectorEmptyWhenHttpsProxyHostSet() {
-        // Mutant killed: removing the https.proxyHost check. The default selector
+        // Would fail if the https.proxyHost check were removed: the default selector
         // already applies https.proxyHost to this client's https URLs, so an
         // env-var (or http.proxyHost) selector must not override it.
         Optional<ProxySelector> selector = config(
@@ -94,10 +94,10 @@ class ProxyConfigTest {
 
     @Test
     void proxySelectorBuiltFromHttpProxySystemProperties() {
-        // Mutants killed: dropping the http.proxyHost compat branch (the default
+        // Would fail if: the http.proxyHost compat branch were dropped (the default
         // selector ignores http.proxyHost for https URLs, so downloads would go
-        // DIRECT - the regression this branch fixes), and flipping the
-        // system-property-over-env-var precedence.
+        // DIRECT - the regression this branch fixes), or the
+        // system-property-over-env-var precedence were flipped.
         ProxySelector selector = config(
             Map.of("http.proxyHost", "sys.example.com", "http.proxyPort", "3128"),
             Map.of("HTTP_PROXY", "http://env.example.com:8080")
@@ -111,9 +111,9 @@ class ProxyConfigTest {
             "system properties must win over the env-var proxy");
     }
 
-    // Mutants killed: http.proxyPort ignored (default 80 always used), default
-    // port changed, unset host not yielding empty, non-numeric port crashing or
-    // producing a bogus address instead of empty.
+    // Would fail if: http.proxyPort were ignored (default 80 always used), the
+    // default port changed, an unset host stopped yielding empty, or a non-numeric
+    // port crashed or produced a bogus address instead of empty.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("sysPropProxyAddressCases")
     void sysPropProxyAddress(String description, Map<String, String> sysProps, InetSocketAddress expected) {
@@ -141,14 +141,14 @@ class ProxyConfigTest {
 
     @Test
     void proxySelectorEmptyWhenNothingConfigured() {
-        // Mutant killed: returning a non-empty selector when no proxy is configured.
+        // Would fail if a non-empty selector were returned when no proxy is configured.
         assertEquals(Optional.empty(), config(Map.of(), Map.of()).proxySelector());
     }
 
     @Test
     void proxySelectorRoutesThroughEnvVarProxy() {
-        // Mutant killed: env-var address not passed to ProxySelector.of (wrong
-        // host/port, or empty returned despite HTTP_PROXY being set).
+        // Would fail if the env-var address were not passed to ProxySelector.of
+        // (wrong host/port, or empty returned despite HTTP_PROXY being set).
         ProxySelector selector = config(Map.of(), Map.of("HTTP_PROXY", "http://proxy.example.com:8080"))
             .proxySelector()
             .orElseThrow(() -> new AssertionError("HTTP_PROXY is set; selector must be present"));
@@ -164,8 +164,8 @@ class ProxyConfigTest {
     // getHttpProxyEnvVariable
     // ------------------------------------------------------------------
 
-    // Mutants killed: HTTPS_PROXY fallback removed, precedence between the two
-    // variables flipped.
+    // Would fail if: the HTTPS_PROXY fallback were removed, or precedence between
+    // the two variables were flipped.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("httpProxyEnvCases")
     void getHttpProxyEnvVariable(String description, Map<String, String> env, String expected) {
@@ -198,8 +198,8 @@ class ProxyConfigTest {
     // getenv
     // ------------------------------------------------------------------
 
-    // Mutants killed: dropping the upper-case or lower-case retry, looking the
-    // name up verbatim instead of case-normalized.
+    // Would fail if: the upper-case or lower-case retry were dropped, or the name
+    // were looked up verbatim instead of case-normalized.
     @ParameterizedTest(name = "[{index}] {0}")
     @MethodSource("getenvCases")
     void getenv(String description, String lookupName, Map<String, String> env, String expected) {

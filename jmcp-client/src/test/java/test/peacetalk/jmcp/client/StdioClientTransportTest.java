@@ -99,10 +99,10 @@ class StdioClientTransportTest {
     }
 
     /**
-     * Kills the mutant: delete (or invert) the id-mismatch check in
-     * sendRequest, so the first parsed response is returned regardless of id.
-     * That mutant returns result {"from":"stale"} and this test's result
-     * assertion fails.
+     * Would fail if the id-mismatch check in sendRequest were deleted (or
+     * inverted): the first parsed response would then be returned regardless
+     * of id, so this test's result assertion would see {"from":"stale"}
+     * instead of the expected result.
      */
     @Test
     void staleResponseWithMismatchedIdIsSkippedUntilMatchingIdArrives() throws Exception {
@@ -127,11 +127,11 @@ class StdioClientTransportTest {
     }
 
     /**
-     * Kills the mutant: replace the string-value id comparison with
+     * Would fail if the string-value id comparison were replaced with
      * {@code sentId.equals(responseId)}. The transport sends Long ids while
      * Jackson deserializes small numeric JSON ids as Integer, so Object.equals
-     * is always false; that mutant treats the correct response as stale and
-     * blocks forever, failing the preemptive timeout.
+     * is always false; the correct response would then be treated as stale,
+     * blocking forever and failing the preemptive timeout.
      */
     @Test
     void responseIdDeserializedAsIntegerMatchesRequestIdSentAsLong() throws Exception {
@@ -158,7 +158,7 @@ class StdioClientTransportTest {
     }
 
     /**
-     * Kills the mutant: remove the exchange lock from sendRequest. Without it,
+     * Would fail if the exchange lock were removed from sendRequest. Without it,
      * both requests are written before either response is read and one thread
      * can consume (and discard) the response belonging to the other, so that
      * caller never completes and Future.get times out; or, without the id
@@ -197,10 +197,10 @@ class StdioClientTransportTest {
     }
 
     /**
-     * Kills the mutant: treat a null-id response like a stale one and skip it.
-     * A null id is not stale - it is how a server reports a request it could
-     * not parse at all (JSON-RPC 2.0), so no response with our id is ever
-     * coming. The skip mutant blocks forever on readLine and fails the
+     * Would fail if a null-id response were treated like a stale one and
+     * skipped. A null id is not stale - it is how a server reports a request it
+     * could not parse at all (JSON-RPC 2.0), so no response with our id is ever
+     * coming. Skipping it would block forever on readLine and fail the
      * preemptive timeout; this test requires the exchange to fail fast with
      * the server's error message instead.
      */
@@ -222,10 +222,10 @@ class StdioClientTransportTest {
     }
 
     /**
-     * Kills the mutants: drop the blank-line skip (the blank line would be
-     * routed as a second "[stdout] " entry), drop or change the "[stdout] "
-     * routing of non-JSON lines (the stderr list assertion fails), or make the
-     * non-JSON branch throw instead of continue (no response is ever
+     * Would fail if: the blank-line skip were dropped (the blank line would be
+     * routed as a second "[stdout] " entry), the "[stdout] " routing of non-JSON
+     * lines were dropped or changed (the stderr list assertion fails), or the
+     * non-JSON branch threw instead of continuing (no response is ever
      * returned). Pins the pre-existing behavior the single-flight change had
      * to preserve.
      */
