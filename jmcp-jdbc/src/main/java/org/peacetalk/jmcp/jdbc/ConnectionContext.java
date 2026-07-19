@@ -51,7 +51,6 @@ public class ConnectionContext implements ConnectionSupplier {
             LOG.error("=== Failed to create connection pool ===");
             LOG.error("Connection ID: {}", config.id());
             LOG.error("Database Type: {}", config.databaseType());
-            LOG.error("JDBC URL: {}", config.jdbcUrl());
             LOG.error("Username: {}", config.username());
             LOG.error("Password: {}", (config.password() != null ? "****" : "null"));
             LOG.error("Driver Class: {}", driver.getClass().getName());
