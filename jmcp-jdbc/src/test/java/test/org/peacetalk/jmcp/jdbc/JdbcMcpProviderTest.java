@@ -40,7 +40,6 @@ class JdbcMcpProviderTest {
     private static Map<String, Object> h2Config(String id, String dbUrl) {
         return Map.of(
             "default_id", id,
-            "expose_urls", false,
             "connections", List.of(Map.of(
                 "id", id,
                 "databaseType", "h2",
@@ -89,11 +88,37 @@ class JdbcMcpProviderTest {
     void testNullConnectionsKeyThrows() {
         // A config object present but with no 'connections' key maps to a null array,
         // which must be rejected just like an empty list.
-        Map<String, Object> config = Map.of("default_id", "x", "expose_urls", false);
+        Map<String, Object> config = Map.of("default_id", "x");
         IllegalStateException ex = assertThrows(IllegalStateException.class,
             () -> provider.configure(config));
         assertTrue(ex.getMessage().contains("no connections"),
             "missing connections key should surface the 'no connections' error");
+    }
+
+    @Test
+    void testLegacyExposeUrlsFieldInConfigIsIgnored() throws Exception {
+        // Upgrade compatibility: a config file written before expose_urls was
+        // removed may still carry that key. JdbcConfiguration no longer declares
+        // the field, but MAPPER.convertValue() tolerates unknown map entries, so
+        // configure() must still succeed rather than rejecting an otherwise-valid
+        // old config file. Would fail if JdbcConfiguration (or the mapper) were
+        // changed to reject unknown properties.
+        Map<String, Object> configWithStaleField = Map.of(
+            "default_id", "test-db",
+            "expose_urls", false,
+            "connections", List.of(Map.of(
+                "id", "test-db",
+                "databaseType", "h2",
+                "jdbcUrl", "jdbc:h2:mem:legacyconfig",
+                "username", "sa",
+                "password", ""
+            ))
+        );
+
+        assertDoesNotThrow(() -> provider.configure(configWithStaleField),
+            "a stale 'expose_urls' key from an old config file must not break configure()");
+        assertFalse(provider.getTools().isEmpty(),
+            "connections from the legacy config should still register tools");
     }
 
     @Test
@@ -188,7 +213,6 @@ class JdbcMcpProviderTest {
     void testConfigurationWithMultipleConnections() throws Exception {
         Map<String, Object> config = Map.of(
             "default_id", "primary",
-            "expose_urls", true,
             "connections", List.of(
                 Map.of("id", "primary", "databaseType", "h2",
                     "jdbcUrl", "jdbc:h2:mem:db1", "username", "sa", "password", ""),

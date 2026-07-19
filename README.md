@@ -124,7 +124,6 @@ corresponding provider by JPMS module name. Create file at its default location 
 {
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "mydb",
-    "expose_urls": false,
     "connections": [
       {
         "id": "mydb",

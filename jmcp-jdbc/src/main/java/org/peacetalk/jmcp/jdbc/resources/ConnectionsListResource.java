@@ -18,7 +18,6 @@ package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
-import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.util.ArrayList;
@@ -71,7 +70,6 @@ public class ConnectionsListResource implements Resource {
             connections.add(new ConnectionEntry(
                 info.id(),
                 info.databaseType(),
-                JdbcUrlSanitizer.getExposableUrl(info.url(), connectionManager.isExposeUrls()),
                 info.username(),
                 connectionUri(info.id()),
                 connectionSchemasUri(info.id())
@@ -98,7 +96,6 @@ public class ConnectionsListResource implements Resource {
     public record ConnectionEntry(
         String id,
         String databaseType,
-        String url,
         String username,
         String resourceUri,
         String schemasUri

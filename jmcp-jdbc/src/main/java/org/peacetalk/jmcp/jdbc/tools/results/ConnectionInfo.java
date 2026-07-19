@@ -19,17 +19,19 @@ package org.peacetalk.jmcp.jdbc.tools.results;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 /**
- * Information about a database connection
+ * Information about a database connection.
+ *
+ * <p>Deliberately carries no JDBC URL field — the URL is never exposed to MCP
+ * clients under any configuration, so there is nothing useful to include here
+ * (a field that always reads a fixed placeholder is dead weight, not data).
  *
  * @param id Connection identifier
- * @param url JDBC URL
  * @param username Database username
  * @param databaseType Type of database (postgresql, mysql, etc.)
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ConnectionInfo(
     String id,
-    String url,
     String username,
     String databaseType
 ) {

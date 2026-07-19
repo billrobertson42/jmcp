@@ -16,7 +16,6 @@ Create `~/.jmcp/config.json`:
 {
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "mydb",
-    "expose_urls": false,
     "connections": [
       {
         "id": "mydb",
@@ -69,7 +68,7 @@ Instead of a config file, you can set `JMCP_CONFIG` to a JSON string containing 
 full config (same module-keyed format):
 
 ```bash
-export JMCP_CONFIG='{"org.peacetalk.jmcp.jdbc":{"default_id":"test","expose_urls":false,"connections":[{"id":"test","databaseType":"h2","jdbcUrl":"jdbc:h2:mem:test","username":"sa","password":""}]}}'
+export JMCP_CONFIG='{"org.peacetalk.jmcp.jdbc":{"default_id":"test","connections":[{"id":"test","databaseType":"h2","jdbcUrl":"jdbc:h2:mem:test","username":"sa","password":""}]}}'
 ./run.sh
 ```
 

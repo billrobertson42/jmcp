@@ -37,13 +37,11 @@ public class ConnectionManager implements ConnectionContextResolver {
     private final JdbcDriverClassManager driverManager;
     private final Map<String, ConnectionContext> pools;
     private String defaultConnectionId;
-    private boolean exposeUrls;
 
     public ConnectionManager(JdbcDriverClassManager driverManager) {
         this.driverManager = driverManager;
         this.pools = new ConcurrentHashMap<>();
         this.defaultConnectionId = "default";
-        this.exposeUrls = false;  // Default to false for security
     }
 
     /**
@@ -58,20 +56,6 @@ public class ConnectionManager implements ConnectionContextResolver {
      */
     public String getDefaultConnectionId() {
         return defaultConnectionId;
-    }
-
-    /**
-     * Set whether to expose JDBC URLs in connection listings
-     */
-    public void setExposeUrls(boolean exposeUrls) {
-        this.exposeUrls = exposeUrls;
-    }
-
-    /**
-     * Get whether JDBC URLs are exposed
-     */
-    public boolean isExposeUrls() {
-        return exposeUrls;
     }
 
     /**
@@ -105,13 +89,13 @@ public class ConnectionManager implements ConnectionContextResolver {
     }
 
     /**
-     * List all available connections with sanitized URLs
+     * List all available connections. {@link ConnectionInfo} carries no JDBC
+     * URL — it is never exposed to MCP clients under any configuration.
      */
     public List<ConnectionInfo> listConnections() {
         return pools.values().stream()
             .map(pool -> new ConnectionInfo(
                 pool.getConnectionId(),
-                JdbcUrlSanitizer.getExposableUrl(pool.getJdbcUrl(), exposeUrls),
                 pool.getUsername(),
                 pool.getDatabaseType()
             ))

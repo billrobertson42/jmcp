@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
-import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.config.ConnectionConfig;
 import org.peacetalk.jmcp.jdbc.driver.JdbcDriverClassManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
@@ -165,8 +164,7 @@ class ConnectionManagerTest {
         ConnectionInfo info = connections.getFirst();
         assertEquals("test-h2", info.id());
         assertEquals("h2", info.databaseType());
-        assertNotNull(info.url());
-        assertNotNull(info.username());
+        assertEquals("sa", info.username());
     }
 
     @Test
@@ -193,59 +191,6 @@ class ConnectionManagerTest {
     }
 
     @Test
-    void testExposeUrlsReturnsSanitizedUrl() throws Exception {
-        // When exposeUrls=true the manager returns the real URL run through the
-        // sanitizer (rather than the fully-hidden "****"). We use a connectable
-        // H2 URL here because registerConnection eagerly opens a pool; the
-        // masking of embedded secrets itself is covered directly in
-        // JdbcUrlSanitizerTest.
-        String testUrl = "jdbc:h2:mem:exposetest;DB_CLOSE_DELAY=-1";
-
-        connectionManager.setExposeUrls(true);
-        connectionManager.registerConnection(
-            ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
-
-        List<ConnectionInfo> connections = connectionManager.listConnections();
-        assertEquals(1, connections.size());
-
-        String exposedUrl = connections.getFirst().url();
-        assertNotEquals("****", exposedUrl,
-            "with exposeUrls=true the URL must not be fully hidden");
-        assertEquals(JdbcUrlSanitizer.sanitizeUrl(testUrl), exposedUrl,
-            "exposed URL must be the sanitized form of the registered URL");
-    }
-
-    @Test
-    void testUrlExposureControl() throws Exception {
-        String testUrl = "jdbc:h2:mem:testdb";
-        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
-        connectionManager.setExposeUrls(false);
-
-        List<ConnectionInfo> connections = connectionManager.listConnections();
-        assertEquals(1, connections.size());
-        assertEquals("****", connections.getFirst().url());
-    }
-
-    @Test
-    void testUrlExposureWhenEnabled() throws Exception {
-        String testUrl = "jdbc:h2:mem:testdb";
-        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
-        connectionManager.setExposeUrls(true);
-
-        List<ConnectionInfo> connections = connectionManager.listConnections();
-        assertEquals(1, connections.size());
-        // With no sensitive params, the exposed URL is the exact original.
-        assertEquals(testUrl, connections.getFirst().url());
-    }
-
-    @Test
-    void testExposeUrlsDefaultsToFalse() {
-        // Security default: URLs are hidden unless explicitly enabled.
-        assertFalse(connectionManager.isExposeUrls(),
-            "exposeUrls must default to false for security");
-    }
-
-    @Test
     void testCloseConnectionErrorNamesMissingId() throws Exception {
         connectionManager.registerConnection(ConnectionConfig.basic("test-h2", "h2",
                 "jdbc:h2:mem:testdb", "sa", ""));
@@ -265,16 +210,11 @@ class ConnectionManagerTest {
 
     @Test
     void testConnectionInfoUsernameIsExactValue() throws Exception {
-        connectionManager.setExposeUrls(true);
         connectionManager.registerConnection(ConnectionConfig.basic("test-h2", "h2",
                 "jdbc:h2:mem:testdb", "myuser", "mypassword"));
 
         ConnectionInfo info = connectionManager.listConnections().getFirst();
         assertEquals("myuser", info.username(), "username must be surfaced verbatim");
-        // ConnectionInfo carries no password field; the config password must not
-        // leak through any other field.
-        assertFalse(String.valueOf(info.url()).contains("mypassword"),
-            "config password must never appear in the exposed URL");
     }
 
     @Test

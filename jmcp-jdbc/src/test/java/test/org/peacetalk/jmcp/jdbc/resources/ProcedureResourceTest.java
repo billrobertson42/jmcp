@@ -71,7 +71,7 @@ class ProcedureResourceTest {
         when(mockContext.getConnection()).thenReturn(connection);
         when(mockConnectionManager.getContext("testdb")).thenReturn(mockContext);
         when(mockConnectionManager.listConnections()).thenReturn(List.of(
-            new ConnectionInfo("testdb", "jdbc:h2:mem:proceduretest", "sa", "h2")
+            new ConnectionInfo("testdb", "sa", "h2")
         ));
     }
 

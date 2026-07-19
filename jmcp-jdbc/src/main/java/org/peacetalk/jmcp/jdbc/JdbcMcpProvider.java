@@ -87,7 +87,6 @@ public class JdbcMcpProvider implements McpProvider {
         // Initialize connection manager
         connectionManager = new ConnectionManager(driverManager);
         connectionManager.setDefaultConnectionId(jdbcConfig.default_id());
-        connectionManager.setExposeUrls(jdbcConfig.expose_urls());
 
         // Register connections from config
         for (ConnectionConfig connCfg : jdbcConfig.connections()) {
