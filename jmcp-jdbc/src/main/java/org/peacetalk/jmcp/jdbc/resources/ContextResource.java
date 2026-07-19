@@ -19,7 +19,6 @@ package org.peacetalk.jmcp.jdbc.resources;
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
-import org.peacetalk.jmcp.jdbc.JdbcUrlSanitizer;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
 import java.sql.Connection;
@@ -142,7 +141,7 @@ public class ContextResource implements Resource {
             connections.add(new ConnectionSummary(
                 info.id(),
                 info.databaseType(),
-                JdbcUrlSanitizer.getExposableUrl(info.url(), connectionManager.isExposeUrls()),
+                info.url(),
                 info.username(),
                 schemas
             ));

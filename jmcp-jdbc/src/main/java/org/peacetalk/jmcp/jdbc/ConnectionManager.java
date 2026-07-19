@@ -34,16 +34,18 @@ public class ConnectionManager implements ConnectionContextResolver {
 
     private static final Logger LOG = LogManager.getLogger(ConnectionManager.class);
 
+    // JDBC URLs are never exposed to MCP clients — always shown as this fixed
+    // placeholder, regardless of database type or credentials embedded in the URL.
+    private static final String MASKED_URL = "****";
+
     private final JdbcDriverClassManager driverManager;
     private final Map<String, ConnectionContext> pools;
     private String defaultConnectionId;
-    private boolean exposeUrls;
 
     public ConnectionManager(JdbcDriverClassManager driverManager) {
         this.driverManager = driverManager;
         this.pools = new ConcurrentHashMap<>();
         this.defaultConnectionId = "default";
-        this.exposeUrls = false;  // Default to false for security
     }
 
     /**
@@ -58,20 +60,6 @@ public class ConnectionManager implements ConnectionContextResolver {
      */
     public String getDefaultConnectionId() {
         return defaultConnectionId;
-    }
-
-    /**
-     * Set whether to expose JDBC URLs in connection listings
-     */
-    public void setExposeUrls(boolean exposeUrls) {
-        this.exposeUrls = exposeUrls;
-    }
-
-    /**
-     * Get whether JDBC URLs are exposed
-     */
-    public boolean isExposeUrls() {
-        return exposeUrls;
     }
 
     /**
@@ -105,13 +93,14 @@ public class ConnectionManager implements ConnectionContextResolver {
     }
 
     /**
-     * List all available connections with sanitized URLs
+     * List all available connections. The JDBC URL is never exposed — every
+     * connection reports the fixed {@value #MASKED_URL} placeholder.
      */
     public List<ConnectionInfo> listConnections() {
         return pools.values().stream()
             .map(pool -> new ConnectionInfo(
                 pool.getConnectionId(),
-                JdbcUrlSanitizer.getExposableUrl(pool.getJdbcUrl(), exposeUrls),
+                MASKED_URL,
                 pool.getUsername(),
                 pool.getDatabaseType()
             ))

@@ -1,7 +1,6 @@
 {
   "org.peacetalk.jmcp.jdbc": {
     "default_id": "default",
-    "expose_urls": false,
     "connections": [
       {
         "id": "default",
