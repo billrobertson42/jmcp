@@ -20,13 +20,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.peacetalk.jmcp.client.ui.ValueParser;
 
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for ValueParser.
+ * Unit tests for ValueParser's schema-driven coercion.
  */
 class ValueParserTest {
     private ValueParser parser;
@@ -36,253 +37,198 @@ class ValueParserTest {
         parser = new ValueParser();
     }
 
-    @Test
-    void testParseInteger() {
-        Object result = parser.parse("42");
-        assertEquals(42, result, "'42' should parse to the int value 42");
-        assertInstanceOf(Integer.class, result, "whole numbers should parse to Integer");
-    }
+    // --- string: no guessing ---
 
     @Test
-    void testParseNegativeInteger() {
-        Object result = parser.parse("-123");
-        assertEquals(-123, result, "'-123' should parse to the int value -123");
-        assertInstanceOf(Integer.class, result);
-    }
-
-    @Test
-    void testParseZero() {
-        Object result = parser.parse("0");
-        assertEquals(0, result, "'0' should parse to int 0");
-        assertInstanceOf(Integer.class, result);
-    }
-
-    @Test
-    void testParseDouble() {
-        Object result = parser.parse("3.14");
-        assertEquals(3.14, result, "'3.14' should parse to the double value 3.14");
-        assertInstanceOf(Double.class, result, "values containing '.' should parse to Double");
-    }
-
-    @Test
-    void testParseNegativeDouble() {
-        Object result = parser.parse("-2.5");
-        assertEquals(-2.5, result, "'-2.5' should parse to the double value -2.5");
-        assertInstanceOf(Double.class, result);
-    }
-
-    @Test
-    void testParseLeadingDotDouble() {
-        // Double.parseDouble accepts a leading dot; parse() routes anything with '.' to Double.
-        Object result = parser.parse(".5");
-        assertEquals(0.5, result, "'.5' should parse to 0.5 as a Double");
-        assertInstanceOf(Double.class, result);
-    }
-
-    @Test
-    void testParseBooleanTrue() {
-        Object result = parser.parse("true");
-        assertEquals(true, result, "'true' should parse to Boolean.TRUE");
-        assertInstanceOf(Boolean.class, result);
-    }
-
-    @Test
-    void testParseBooleanFalse() {
-        Object result = parser.parse("false");
-        assertEquals(false, result, "'false' should parse to Boolean.FALSE");
-        assertInstanceOf(Boolean.class, result);
-    }
-
-    @Test
-    void testParseBooleanCaseInsensitive() {
-        assertEquals(true, parser.parse("TRUE"), "'TRUE' should parse to Boolean.TRUE");
-        assertEquals(true, parser.parse("True"), "'True' should parse to Boolean.TRUE");
-        assertEquals(false, parser.parse("FALSE"), "'FALSE' should parse to Boolean.FALSE");
-        assertEquals(false, parser.parse("False"), "'False' should parse to Boolean.FALSE");
-        // Result type must actually be Boolean, not the original String.
-        assertInstanceOf(Boolean.class, parser.parse("TRUE"));
-    }
-
-    @Test
-    void testParseBooleanLikeButNotExact() {
-        // "yes"/"trueish" are not the exact tokens true/false, so they stay strings.
-        assertEquals("yes", parser.parse("yes"), "'yes' is not a boolean token; stays a String");
-        assertEquals("trueish", parser.parse("trueish"),
-            "'trueish' is not exactly 'true'; stays a String");
-        assertInstanceOf(String.class, parser.parse("yes"));
-    }
-
-    @Test
-    void testParseString() {
-        Object result = parser.parse("hello world");
-        assertEquals("hello world", result);
+    void stringTypeKeepsBooleanLookingTextAsString() {
+        Object result = parser.coerce("mode", "string", "true");
+        assertEquals("true", result, "a string-typed field must not be coerced to Boolean");
         assertInstanceOf(String.class, result);
     }
 
     @Test
-    void testParseObjectJsonStaysString() {
-        // parse() only routes '[' ... ']' to JSON. A JSON *object* is NOT parsed and
-        // is returned verbatim as a String.
-        String obj = """
-                {"key": "value"}""";
-        Object result = parser.parse(obj);
-        assertEquals(obj, result, "JSON objects are not parsed by parse(); returned as String");
+    void stringTypeKeepsNumericTextAsString() {
+        Object result = parser.coerce("code", "string", "42");
+        assertEquals("42", result, "a string-typed field must not be coerced to a number");
         assertInstanceOf(String.class, result);
     }
 
     @Test
-    void testParseEmptyString() {
-        Object result = parser.parse("");
-        assertEquals("", result, "empty string is returned unchanged");
+    void stringTypeKeepsJsonLookingTextAsString() {
+        Object result = parser.coerce("template", "string", "[1, 2]");
+        assertEquals("[1, 2]", result, "a string-typed field must not be parsed as JSON");
         assertInstanceOf(String.class, result);
     }
 
+    // --- integer: long, widening to BigInteger on overflow ---
+
     @Test
-    void testParseBlankString() {
-        Object result = parser.parse("   ");
-        assertEquals("   ", result, "blank string is returned unchanged (isBlank short-circuit)");
-        assertInstanceOf(String.class, result);
+    void integerCoercesToLong() {
+        Object result = parser.coerce("count", "integer", "42");
+        assertEquals(42L, result, "'42' should coerce to the long value 42");
+        assertInstanceOf(Long.class, result, "integer fields coerce to Long");
     }
 
     @Test
-    void testParseNull() {
-        Object result = parser.parse(null);
-        assertNull(result, "null input returns null");
+    void integerCoercesNegativeToLong() {
+        Object result = parser.coerce("offset", "integer", "-123");
+        assertEquals(-123L, result);
+        assertInstanceOf(Long.class, result);
     }
 
     @Test
-    void testParseJsonArrayNumbers() {
-        Object result = parser.parse("[1, 2, 3]");
-        assertInstanceOf(List.class, result, "a JSON array should parse to a List");
-        assertEquals(List.of(1, 2, 3), result, "'[1, 2, 3]' should parse to [1, 2, 3]");
+    void integerBeyondIntRangeStaysNumeric() {
+        // The old heuristic parser used Integer.parseInt and silently fell back
+        // to String for anything past Integer.MAX_VALUE.
+        Object result = parser.coerce("id", "integer", "99999999999");
+        assertEquals(99999999999L, result, "values past int range must still coerce to a number");
+        assertInstanceOf(Long.class, result);
     }
 
     @Test
-    void testParseEmptyJsonArray() {
-        Object result = parser.parse("[]");
-        assertInstanceOf(List.class, result, "'[]' should parse to an empty List");
-        assertTrue(((List<?>) result).isEmpty(), "'[]' should be an empty list");
+    void integerBeyondLongRangeWidensToBigInteger() {
+        String overLongMax = "9223372036854775808"; // Long.MAX_VALUE + 1
+        Object result = parser.coerce("id", "integer", overLongMax);
+        assertEquals(new BigInteger(overLongMax), result,
+                "long overflow must widen to BigInteger, not fall back to String");
+        assertInstanceOf(BigInteger.class, result);
     }
 
     @Test
-    void testParseInvalidJsonArray() {
-        // Malformed JSON should fall through to string.
-        Object result = parser.parse("[invalid json");
-        assertEquals("[invalid json", result, "malformed array text should be returned as a String");
-        assertInstanceOf(String.class, result);
+    void integerRejectsNonNumericText() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("count", "integer", "abc"));
+        assertTrue(ex.getMessage().contains("count"), "error must name the field: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("abc"), "error must show the bad value: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("integer"), "error must name the expected type: " + ex.getMessage());
     }
 
     @Test
-    void testParseBracketOpenNoClose() {
-        // Starts with '[' but does not end with ']', so the JSON branch is never entered.
-        Object result = parser.parse("[1, 2, 3");
-        assertEquals("[1, 2, 3", result, "text without a closing ']' is not treated as JSON");
-        assertInstanceOf(String.class, result);
+    void integerRejectsDecimalText() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("count", "integer", "3.5"),
+                "a decimal is not a valid integer");
+        assertTrue(ex.getMessage().contains("3.5"), "error must show the bad value: " + ex.getMessage());
     }
 
-    @Test
-    void testParseNumberInvalidFormat() {
-        // "12.34.56" contains '.', so Double.parseDouble is attempted and fails -> String.
-        Object result = parser.parse("12.34.56");
-        assertEquals("12.34.56", result, "double-dotted number is invalid; returned as String");
-        assertInstanceOf(String.class, result);
-    }
+    // --- number: double ---
 
     @Test
-    void testParseIntegerOverflowFallsBackToString() {
-        // Value has no '.', so Integer.parseInt is used; a value beyond int range overflows,
-        // NumberFormatException is caught, and the raw String is returned.
-        String big = "99999999999"; // > Integer.MAX_VALUE
-        Object result = parser.parse(big);
-        assertEquals(big, result, "int-overflowing whole number should fall back to String");
-        assertInstanceOf(String.class, result,
-            "parse() never widens to Long, so an overflowing integer stays a String");
-    }
-
-    @Test
-    void testParseScientificNotationWithoutDotIsString() {
-        // "1e5" has no '.', Integer.parseInt fails, and it is not routed to Double -> String.
-        Object result = parser.parse("1e5");
-        assertEquals("1e5", result, "scientific notation without a '.' is not parsed as a number");
-        assertInstanceOf(String.class, result);
-    }
-
-    @Test
-    void testParseNumberMethodInteger() {
-        Number result = parser.parseNumber("42");
-        assertEquals(42, result);
-        assertInstanceOf(Integer.class, result);
-    }
-
-    @Test
-    void testParseNumberMethodDouble() {
-        Number result = parser.parseNumber("3.14");
+    void numberCoercesToDouble() {
+        Object result = parser.coerce("ratio", "number", "3.14");
         assertEquals(3.14, result);
         assertInstanceOf(Double.class, result);
     }
 
     @Test
-    void testParseNumberMethodInvalid() {
-        assertNull(parser.parseNumber("not a number"), "non-numeric text returns null");
+    void numberCoercesWholeNumberTextToDouble() {
+        // The old parser routed values without '.' to Integer; a number-typed
+        // field must coerce by declared type, not by the presence of a dot.
+        Object result = parser.coerce("ratio", "number", "42");
+        assertEquals(42.0, result, "number-typed '42' must coerce to a double");
+        assertInstanceOf(Double.class, result);
     }
 
     @Test
-    void testParseNumberMethodWithSurroundingSpaces() {
-        // Integer.parseInt does NOT trim, so a padded number is not a valid number.
-        assertNull(parser.parseNumber("  42  "),
-            "parseNumber does not trim; padded integer is not parseable");
+    void numberRejectsNonNumericText() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("ratio", "number", "fast"));
+        assertTrue(ex.getMessage().contains("ratio"), "error must name the field: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("fast"), "error must show the bad value: " + ex.getMessage());
+    }
+
+    // --- boolean: strict true/false ---
+
+    @Test
+    void booleanCoercesTrueAndFalseCaseInsensitively() {
+        assertEquals(Boolean.TRUE, parser.coerce("flag", "boolean", "true"));
+        assertEquals(Boolean.TRUE, parser.coerce("flag", "boolean", "TRUE"));
+        assertEquals(Boolean.FALSE, parser.coerce("flag", "boolean", "false"));
+        assertEquals(Boolean.FALSE, parser.coerce("flag", "boolean", "False"));
     }
 
     @Test
-    void testParseNumberWithSpacesReturnsString() {
-        // Strengthened from the old either/or assertion: parse() delegates to parseNumber
-        // which cannot parse a space-padded value, so the raw String is returned unchanged.
-        Object result = parser.parse("  42  ");
-        assertEquals("  42  ", result,
-            "space-padded number is not parsed; returned verbatim as a String");
+    void booleanRejectsNonBooleanToken() {
+        // Boolean.parseBoolean would silently return false for "yes"; the
+        // coercer must reject it instead.
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("flag", "boolean", "yes"));
+        assertTrue(ex.getMessage().contains("flag"), "error must name the field: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("yes"), "error must show the bad value: " + ex.getMessage());
+    }
+
+    @Test
+    void booleanRejectsTruePrefixedToken() {
+        assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("flag", "boolean", "trueish"),
+                "'trueish' is not exactly true/false and must be rejected");
+    }
+
+    // --- array / object: JSON ---
+
+    @Test
+    void arrayCoercesJsonArray() {
+        Object result = parser.coerce("ids", "array", "[1, 2, 3]");
+        assertEquals(List.of(1, 2, 3), result, "'[1, 2, 3]' should parse to the list [1, 2, 3]");
+    }
+
+    @Test
+    void arrayCoercesArrayOfObjects() {
+        Object result = parser.coerce("people", "array", """
+                [{"name": "Alice"}, {"name": "Bob"}]""");
+        assertEquals(List.of(Map.of("name", "Alice"), Map.of("name", "Bob")), result);
+    }
+
+    @Test
+    void arrayRejectsMalformedJson() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("ids", "array", "[1, 2"));
+        assertTrue(ex.getMessage().contains("ids"), "error must name the field: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("array"), "error must name the expected type: " + ex.getMessage());
+    }
+
+    @Test
+    void objectCoercesJsonObject() {
+        // The old parser only handled '[...]' and returned JSON objects verbatim
+        // as strings.
+        Object result = parser.coerce("config", "object", """
+                {"key": "value"}""");
+        assertEquals(Map.of("key", "value"), result,
+                "an object-typed field must parse to a Map, not stay a String");
+    }
+
+    @Test
+    void objectRejectsMalformedJson() {
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+                () -> parser.coerce("config", "object", "{key"));
+        assertTrue(ex.getMessage().contains("config"), "error must name the field: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("object"), "error must name the expected type: " + ex.getMessage());
+    }
+
+    // --- absent / unknown type: one JSON attempt, then raw string ---
+
+    @Test
+    void absentTypeParsesValidJson() {
+        assertEquals(List.of(1, 2), parser.coerce("x", null, "[1, 2]"),
+                "untyped JSON array text should parse");
+        assertEquals(Boolean.TRUE, parser.coerce("x", null, "true"),
+                "untyped 'true' should parse to Boolean via JSON");
+        assertEquals(42, parser.coerce("x", null, "42"),
+                "untyped '42' should parse to a number via JSON");
+    }
+
+    @Test
+    void absentTypeFallsBackToRawString() {
+        Object result = parser.coerce("x", null, "hello world");
+        assertEquals("hello world", result, "non-JSON text under an untyped field stays a String");
         assertInstanceOf(String.class, result);
     }
 
     @Test
-    void testParseBooleanMethod() {
-        assertEquals(true, parser.parseBoolean("true"));
-        assertEquals(false, parser.parseBoolean("false"));
-        // Boolean.parseBoolean returns false for anything that is not "true".
-        assertEquals(false, parser.parseBoolean("yes"),
-            "parseBoolean returns false for non-'true' strings");
-        assertEquals(false, parser.parseBoolean(null),
-            "parseBoolean returns false for null (Boolean.parseBoolean contract)");
-    }
-
-    @Test
-    void testParseJsonMethodArray() {
-        Object result = parser.parseJson("[1, 2, 3]");
-        assertInstanceOf(List.class, result);
-        assertEquals(List.of(1, 2, 3), result);
-    }
-
-    @Test
-    void testParseJsonMethodObject() {
-        Object result = parser.parseJson("""
-                {"key": "value"}""");
-        assertInstanceOf(Map.class, result, "a JSON object should parse to a Map");
-        assertEquals(Map.of("key", "value"), result);
-    }
-
-    @Test
-    void testParseJsonMethodInvalid() {
-        assertNull(parser.parseJson("not json"), "unparseable text returns null");
-    }
-
-    @Test
-    void testParseComplexJsonArray() {
-        Object result = parser.parse("""
-                [{"name": "Alice"}, {"name": "Bob"}]""");
-        assertInstanceOf(List.class, result, "array of objects should parse to a List");
-        List<?> list = (List<?>) result;
-        assertEquals(2, list.size(), "should parse both array elements");
-        assertInstanceOf(Map.class, list.get(0), "each element should be a Map");
-        assertEquals("Alice", ((Map<?, ?>) list.get(0)).get("name"));
-        assertEquals("Bob", ((Map<?, ?>) list.get(1)).get("name"));
+    void unknownTypeBehavesLikeAbsentType() {
+        assertEquals("2024-01-01", parser.coerce("when", "date", "2024-01-01"),
+                "an unrecognized schema type falls back to JSON-then-string");
+        assertEquals(List.of(1), parser.coerce("when", "date", "[1]"),
+                "an unrecognized schema type still gets one JSON parse attempt");
     }
 }

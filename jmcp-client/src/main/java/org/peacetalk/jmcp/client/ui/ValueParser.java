@@ -16,89 +16,102 @@
 
 package org.peacetalk.jmcp.client.ui;
 
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+import java.math.BigInteger;
+
 /**
- * Parses string values into appropriate Java types.
- * Handles numbers, booleans, JSON arrays, and strings.
+ * Coerces string form input into Java values according to the field's declared
+ * JSON-schema type. No type guessing: a {@code string}-typed field stays a
+ * string even if it looks like a number or boolean, and a value that cannot be
+ * coerced to its declared type is an error surfaced to the caller as an
+ * {@link IllegalArgumentException}, never silently passed through as a string.
  */
 public class ValueParser {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
-     * Parse a string value into the most appropriate type.
+     * Coerce a raw form value to the field's declared JSON-schema type.
      *
-     * @param value The string value to parse
-     * @return The parsed value (Integer, Double, Boolean, Object, or String)
+     * @param fieldName The field name, used in error messages
+     * @param schemaType The declared JSON-schema type ("string", "integer",
+     *        "number", "boolean", "array", "object"), or null if the schema
+     *        declares no type
+     * @param value The non-empty raw text entered by the user
+     * @return The coerced value
+     * @throws IllegalArgumentException if the value cannot be coerced to the
+     *         declared type
      */
-    public Object parse(String value) {
-        if (value == null || value.isBlank()) {
-            return value;
+    public Object coerce(String fieldName, String schemaType, String value) {
+        if (schemaType == null) {
+            return parseJsonOrString(value);
         }
-
-        // Try to parse as number
-        Object number = parseNumber(value);
-        if (number != null) {
-            return number;
-        }
-
-        // Try to parse as boolean
-        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
-            return parseBoolean(value);
-        }
-
-        // Try to parse as JSON array
-        if (value.startsWith("[") && value.endsWith("]")) {
-            Object json = parseJson(value);
-            if (json != null) {
-                return json;
-            }
-        }
-
-        // Default to string
-        return value;
+        return switch (schemaType) {
+            case "string" -> value;
+            case "integer" -> coerceInteger(fieldName, value);
+            case "number" -> coerceNumber(fieldName, value);
+            case "boolean" -> coerceBoolean(fieldName, value);
+            case "array", "object" -> coerceJson(fieldName, schemaType, value);
+            default -> parseJsonOrString(value);
+        };
     }
 
     /**
-     * Parse a string as a number (Integer or Double).
-     *
-     * @param value The string to parse
-     * @return Integer, Double, or null if not a number
+     * Coerce to a whole number: Long, widening to BigInteger on overflow.
      */
-    public Number parseNumber(String value) {
+    private Object coerceInteger(String fieldName, String value) {
         try {
-            if (value.contains(".")) {
-                return Double.parseDouble(value);
-            } else {
-                return Integer.parseInt(value);
-            }
+            return Long.parseLong(value);
         } catch (NumberFormatException e) {
-            return null;
+            try {
+                return new BigInteger(value);
+            } catch (NumberFormatException e2) {
+                throw new IllegalArgumentException(
+                        "Field '" + fieldName + "': '" + value + "' is not a valid integer");
+            }
         }
     }
 
-    /**
-     * Parse a string as a boolean.
-     *
-     * @param value The string to parse
-     * @return Boolean value
-     */
-    public Boolean parseBoolean(String value) {
-        return Boolean.parseBoolean(value);
+    private Object coerceNumber(String fieldName, String value) {
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(
+                    "Field '" + fieldName + "': '" + value + "' is not a valid number");
+        }
     }
 
-    /**
-     * Parse a string as JSON.
-     *
-     * @param value The JSON string to parse
-     * @return Parsed object or null if parsing fails
-     */
-    public Object parseJson(String value) {
+    private Object coerceBoolean(String fieldName, String value) {
+        if ("true".equalsIgnoreCase(value)) {
+            return Boolean.TRUE;
+        }
+        if ("false".equalsIgnoreCase(value)) {
+            return Boolean.FALSE;
+        }
+        throw new IllegalArgumentException(
+                "Field '" + fieldName + "': '" + value + "' is not a valid boolean (expected true or false)");
+    }
+
+    private Object coerceJson(String fieldName, String schemaType, String value) {
         try {
             return MAPPER.readValue(value, Object.class);
-        } catch (Exception e) {
-            return null;
+        } catch (JacksonException e) {
+            throw new IllegalArgumentException(
+                    "Field '" + fieldName + "': '" + value + "' is not valid JSON for type "
+                            + schemaType + ": " + e.getMessage());
+        }
+    }
+
+    /**
+     * For fields with no (or an unrecognized) declared type: one JSON parse
+     * attempt, falling back to the raw string.
+     */
+    private Object parseJsonOrString(String value) {
+        try {
+            return MAPPER.readValue(value, Object.class);
+        } catch (JacksonException e) {
+            return value;
         }
     }
 }
-
