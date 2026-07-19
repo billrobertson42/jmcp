@@ -88,7 +88,7 @@ class MavenCoordinatesTest {
 
     @Test
     void parseSplitsGavIntoComponents() {
-        // Mutant killed: the three parts assigned to the wrong record components
+        // Would fail if the three parts were assigned to the wrong record components
         // (e.g. artifactId/version swapped) - each field is asserted by value.
         MavenCoordinates coords = MavenCoordinates.parse("com.microsoft.azure:msal4j:1.25.0");
         assertEquals("com.microsoft.azure", coords.groupId());
@@ -96,8 +96,8 @@ class MavenCoordinatesTest {
         assertEquals("1.25.0", coords.version());
     }
 
-    // Mutant killed: dropping the part-count/blank validation, which would turn
-    // malformed known_drivers.json entries into garbage coordinates (and 404
+    // Would fail if the part-count/blank validation were dropped: malformed
+    // known_drivers.json entries would then become garbage coordinates (and 404
     // downloads) instead of a load-time error naming the bad string.
     @ParameterizedTest(name = "[{index}] \"{0}\"")
     @NullSource

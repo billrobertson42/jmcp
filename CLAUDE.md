@@ -24,7 +24,7 @@ for it when asked to review or rework a suite.
 > and delete it if it exists.**
 
 This is the single rule that subsumes all the others. It is "mutation testing"
-stated in English: a test earns its place only by *killing a mutant* — some
+stated in English: a test earns its place only if it would fail on some
 plausible bug in the code under test. Before committing a test, finish this
 sentence:
 
@@ -60,7 +60,7 @@ assertEquals(4, result.columns().size());
 ```
 
 ### 1.2 Would it fail if the code were wrong? (mutation thinking)
-- Name the mutant (see §0). If you can't, cut the test.
+- Name the concrete change that would break it (see §0). If you can't, cut the test.
 - Beware tests that **pass for the wrong reason** — most commonly by relying on a
   Mockito mock's *default* return value instead of an explicit stub.
 
@@ -254,12 +254,12 @@ When you find a weak test, choose deliberately:
 
 | Situation | Action |
 |-----------|--------|
-| Cannot name any mutant it kills (§0); structurally cannot fail; zero-assertion; asserts the JDK/constructor | **Delete** |
+| Cannot name a concrete change it would catch (§0); structurally cannot fail; zero-assertion; asserts the JDK/constructor | **Delete** |
 | Makes a worthwhile call but asserts only presence (§2.4) | **Rewrite** to assert values |
 | Weak but *can* fail on a real, plausible bug (e.g. `assertNotNull(getContext(id))` after register — a no-op registration would fail it) | **Keep** (optionally strengthen). Do not delete working regression protection just because it is modest. |
 | Two tests exercise the identical path | **Consolidate** |
 
-When in doubt between delete and keep, ask again: *what mutant does it kill?* If
+When in doubt between delete and keep, ask again: *what would make it fail?* If
 the answer is a real one, keep it.
 
 ### 4.2 The Rigorous Backstop: Mutation Testing
@@ -268,13 +268,14 @@ Grep and eyeballing catch the obvious theater (zero-assertion, `assertNotNull`-o
 construct-then-assert). They **cannot** catch the structurally-cannot-fail class
 (§2.2), because those tests have real assertions. The only reliable detector is
 **mutation testing**: it mutates production bytecode (flip `<`→`<=`, negate
-conditionals, make methods return null/empty) and reports which mutants your tests
-fail to kill. A test that kills zero mutants is theater, proven empirically.
+conditionals, make methods return null/empty) and reports which of those changes
+your tests fail to catch. A test that catches none of them is theater, proven
+empirically.
 
 For Java, use **PITest** (`pitest-maven`). It is slow and noisy over a whole suite,
 so scope each run to whatever code is under review in that task — for a security
 audit that means the validators/sanitizers; for a different module, scope it there
-instead. Treat a surviving mutant as a coverage gap to be closed with a real test.
+instead. Treat a surviving mutation as a coverage gap to be closed with a real test.
 
 ---
 
