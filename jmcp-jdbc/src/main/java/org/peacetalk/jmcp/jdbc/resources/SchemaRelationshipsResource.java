@@ -17,19 +17,10 @@
 package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
-import org.peacetalk.jmcp.jdbc.ConnectionSupplier;
+import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -82,155 +73,15 @@ public class SchemaRelationshipsResource implements Resource {
 
     @Override
     public String read() throws Exception {
-        ConnectionSupplier context = connectionManager.getContext(connectionId);
-        List<Relationship> relationships = new ArrayList<>();
-
-        // For topological sort
-        Set<String> allTables = new LinkedHashSet<>();
-        Map<String, Set<String>> dependencyGraph = new HashMap<>();
-
-        try (Connection conn = context.getConnection()) {
-            DatabaseMetaData metaData = conn.getMetaData();
-
-            // Get all tables in this schema
-            List<String> tables = new ArrayList<>();
-            try (ResultSet rs = metaData.getTables(null, schemaName, "%", new String[]{"TABLE"})) {
-                while (rs.next()) {
-                    String tableName = rs.getString("TABLE_NAME");
-                    tables.add(tableName);
-                    String qualifiedName = schemaName + "." + tableName;
-                    allTables.add(qualifiedName);
-                    dependencyGraph.putIfAbsent(qualifiedName, new HashSet<>());
-                }
-            }
-
-            // For each table in this schema, get its imported keys (FK FROM this table)
-            for (String table : tables) {
-                String fromQualified = schemaName + "." + table;
-
-                try (ResultSet fkRs = metaData.getImportedKeys(null, schemaName, table)) {
-                    String currentFkName = null;
-                    List<ColumnMapping> currentMappings = new ArrayList<>();
-                    String currentPkSchema = null;
-                    String currentPkTable = null;
-
-                    while (fkRs.next()) {
-                        String fkName = fkRs.getString("FK_NAME");
-                        String fkColumn = fkRs.getString("FKCOLUMN_NAME");
-                        String pkSchema = fkRs.getString("PKTABLE_SCHEM");
-                        String pkTable = fkRs.getString("PKTABLE_NAME");
-                        String pkColumn = fkRs.getString("PKCOLUMN_NAME");
-
-                        if (fkName == null) continue;
-
-                        // Track dependency for topological sort (only for tables in this schema)
-                        if (schemaName.equals(pkSchema)) {
-                            String toQualified = pkSchema + "." + pkTable;
-                            dependencyGraph.computeIfAbsent(fromQualified, k -> new HashSet<>()).add(toQualified);
-                        }
-
-                        if (!fkName.equals(currentFkName)) {
-                            if (currentFkName != null) {
-                                relationships.add(new Relationship(
-                                    currentFkName,
-                                    schemaName,
-                                    table,
-                                    currentPkSchema,
-                                    currentPkTable,
-                                    new ArrayList<>(currentMappings),
-                                    tableUri(connectionId, schemaName, table),
-                                    tableUri(connectionId, currentPkSchema, currentPkTable)
-                                ));
-                            }
-                            currentFkName = fkName;
-                            currentMappings.clear();
-                            currentPkSchema = pkSchema;
-                            currentPkTable = pkTable;
-                        }
-                        currentMappings.add(new ColumnMapping(fkColumn, pkColumn));
-                    }
-
-                    if (currentFkName != null) {
-                        relationships.add(new Relationship(
-                            currentFkName,
-                            schemaName,
-                            table,
-                            currentPkSchema,
-                            currentPkTable,
-                            currentMappings,
-                            tableUri(connectionId, schemaName, table),
-                            tableUri(connectionId, currentPkSchema, currentPkTable)
-                        ));
-                    }
-                }
-
-                // Also get exported keys (FK TO this table from other schemas)
-                // This is important to see cross-schema dependencies
-                try (ResultSet fkRs = metaData.getExportedKeys(null, schemaName, table)) {
-                    String currentFkName = null;
-                    List<ColumnMapping> currentMappings = new ArrayList<>();
-                    String currentFkSchema = null;
-                    String currentFkTable = null;
-
-                    while (fkRs.next()) {
-                        String fkName = fkRs.getString("FK_NAME");
-                        String fkColumn = fkRs.getString("FKCOLUMN_NAME");
-                        String fkSchema = fkRs.getString("FKTABLE_SCHEM");
-                        String fkTable = fkRs.getString("FKTABLE_NAME");
-                        String pkColumn = fkRs.getString("PKCOLUMN_NAME");
-
-                        if (fkName == null) continue;
-
-                        // Skip if the referencing table is also in this schema
-                        // (we already captured it in the imported keys loop)
-                        if (schemaName.equals(fkSchema)) continue;
-
-                        if (!fkName.equals(currentFkName)) {
-                            if (currentFkName != null) {
-                                relationships.add(new Relationship(
-                                    currentFkName,
-                                    currentFkSchema,
-                                    currentFkTable,
-                                    schemaName,
-                                    table,
-                                    new ArrayList<>(currentMappings),
-                                    tableUri(connectionId, currentFkSchema, currentFkTable),
-                                    tableUri(connectionId, schemaName, table)
-                                ));
-                            }
-                            currentFkName = fkName;
-                            currentMappings.clear();
-                            currentFkSchema = fkSchema;
-                            currentFkTable = fkTable;
-                        }
-                        currentMappings.add(new ColumnMapping(pkColumn, fkColumn));
-                    }
-
-                    if (currentFkName != null) {
-                        relationships.add(new Relationship(
-                            currentFkName,
-                            currentFkSchema,
-                            currentFkTable,
-                            schemaName,
-                            table,
-                            currentMappings,
-                            tableUri(connectionId, currentFkSchema, currentFkTable),
-                            tableUri(connectionId, schemaName, table)
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Compute topological sort for copy order (only for tables in this schema)
-        TopologicalSortResult sortResult = TopologicalSort.sort(allTables, dependencyGraph);
+        ConnectionContext context = connectionManager.getContext(connectionId);
+        RelationshipGraphBuilder.Graph graph = RelationshipGraphBuilder.build(connectionId, context, schemaName);
 
         SchemaRelationshipsResponse response = new SchemaRelationshipsResponse(
             connectionId,
             schemaName,
-            relationships,
-            sortResult.sortedTables(),
-            sortResult.cycles(),
+            graph.relationships(),
+            graph.copyOrder(),
+            graph.cyclesDetected(),
             new NavigationLinks(
                 schemaUri(connectionId, schemaName)
             )
@@ -258,4 +109,3 @@ public class SchemaRelationshipsResource implements Resource {
         String parent
     ) {}
 }
-
