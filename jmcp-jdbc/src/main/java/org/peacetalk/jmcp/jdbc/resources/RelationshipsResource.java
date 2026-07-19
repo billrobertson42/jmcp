@@ -196,28 +196,6 @@ public class RelationshipsResource implements Resource {
     ) {}
 
     /**
-     * A single foreign key relationship in the database
-     */
-    public record Relationship(
-        String name,
-        String fromSchema,
-        String fromTable,
-        String toSchema,
-        String toTable,
-        List<ColumnMapping> columns,
-        String fromTableUri,
-        String toTableUri
-    ) {}
-
-    /**
-     * Column mapping for foreign keys
-     */
-    public record ColumnMapping(
-        String fromColumn,
-        String toColumn
-    ) {}
-
-    /**
      * Navigation links for HATEOAS-style navigation
      */
     public record NavigationLinks(
