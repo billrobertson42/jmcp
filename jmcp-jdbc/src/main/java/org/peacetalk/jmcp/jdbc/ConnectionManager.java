@@ -34,10 +34,6 @@ public class ConnectionManager implements ConnectionContextResolver {
 
     private static final Logger LOG = LogManager.getLogger(ConnectionManager.class);
 
-    // JDBC URLs are never exposed to MCP clients — always shown as this fixed
-    // placeholder, regardless of database type or credentials embedded in the URL.
-    private static final String MASKED_URL = "****";
-
     private final JdbcDriverClassManager driverManager;
     private final Map<String, ConnectionContext> pools;
     private String defaultConnectionId;
@@ -93,14 +89,13 @@ public class ConnectionManager implements ConnectionContextResolver {
     }
 
     /**
-     * List all available connections. The JDBC URL is never exposed — every
-     * connection reports the fixed {@value #MASKED_URL} placeholder.
+     * List all available connections. {@link ConnectionInfo} carries no JDBC
+     * URL — it is never exposed to MCP clients under any configuration.
      */
     public List<ConnectionInfo> listConnections() {
         return pools.values().stream()
             .map(pool -> new ConnectionInfo(
                 pool.getConnectionId(),
-                MASKED_URL,
                 pool.getUsername(),
                 pool.getDatabaseType()
             ))

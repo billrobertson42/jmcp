@@ -68,7 +68,7 @@ class JdbcResourceProviderTest {
         when(mockContext.getConnection()).thenReturn(connection);
         when(mockConnectionManager.getContext("testdb")).thenReturn(mockContext);
         when(mockConnectionManager.listConnections()).thenReturn(List.of(
-            new ConnectionInfo("testdb", "db:h2:mem:providertest", "sa", "h2")
+            new ConnectionInfo("testdb", "sa", "h2")
         ));
 
         provider = new JdbcResourceProvider();

@@ -91,7 +91,6 @@ public class ConnectionResource implements Resource {
         ConnectionResponse response = new ConnectionResponse(
             info.id(),
             info.databaseType(),
-            info.url(),
             info.username(),
             dbInfo,
             new NavigationLinks(
@@ -110,7 +109,6 @@ public class ConnectionResource implements Resource {
     public record ConnectionResponse(
         String id,
         String databaseType,
-        String url,
         String username,
         DatabaseInfo database,
         NavigationLinks links

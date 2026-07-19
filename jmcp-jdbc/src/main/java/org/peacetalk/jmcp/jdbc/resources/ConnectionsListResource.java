@@ -70,7 +70,6 @@ public class ConnectionsListResource implements Resource {
             connections.add(new ConnectionEntry(
                 info.id(),
                 info.databaseType(),
-                info.url(),
                 info.username(),
                 connectionUri(info.id()),
                 connectionSchemasUri(info.id())
@@ -97,7 +96,6 @@ public class ConnectionsListResource implements Resource {
     public record ConnectionEntry(
         String id,
         String databaseType,
-        String url,
         String username,
         String resourceUri,
         String schemasUri

@@ -191,22 +191,6 @@ class ConnectionManagerTest {
     }
 
     @Test
-    void testListConnectionsUrlIsAlwaysMasked() throws Exception {
-        // There is no configuration that exposes the JDBC URL to a client — every
-        // connection's url field is the fixed "****" placeholder, regardless of
-        // what the real URL contains. Would fail if listConnections() ever
-        // surfaced the real URL (e.g. via pool.getJdbcUrl()) instead of the
-        // fixed mask.
-        String testUrl = "jdbc:h2:mem:testdb";
-        connectionManager.registerConnection(ConnectionConfig.basic("test", "h2", testUrl, "sa", ""));
-
-        List<ConnectionInfo> connections = connectionManager.listConnections();
-        assertEquals(1, connections.size());
-        assertEquals("****", connections.getFirst().url(),
-            "JDBC URL must never be exposed to clients");
-    }
-
-    @Test
     void testCloseConnectionErrorNamesMissingId() throws Exception {
         connectionManager.registerConnection(ConnectionConfig.basic("test-h2", "h2",
                 "jdbc:h2:mem:testdb", "sa", ""));

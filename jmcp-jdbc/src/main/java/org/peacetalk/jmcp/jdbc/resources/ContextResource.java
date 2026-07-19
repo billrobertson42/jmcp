@@ -141,7 +141,6 @@ public class ContextResource implements Resource {
             connections.add(new ConnectionSummary(
                 info.id(),
                 info.databaseType(),
-                info.url(),
                 info.username(),
                 schemas
             ));
@@ -313,7 +312,6 @@ public class ContextResource implements Resource {
     public record ConnectionSummary(
         String databaseId,
         String databaseType,
-        String url,
         String username,
         List<SchemaSummary> schemas
     ) {}
