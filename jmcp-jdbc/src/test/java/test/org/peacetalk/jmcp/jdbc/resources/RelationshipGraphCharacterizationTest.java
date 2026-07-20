@@ -59,11 +59,11 @@ import static org.peacetalk.jmcp.jdbc.resources.Util.tableUri;
  *
  * Notably, SCHEMA_B.INVOICES -&gt; SCHEMA_A.ORDERS is discovered differently by the
  * two resources: RelationshipsResource finds it while walking INVOICES's imported
- * keys (columns ORDER_ID -&gt; ID), while SchemaRelationshipsResource("SCHEMA_A")
- * only finds it while walking ORDERS's *exported* keys -- and that code path
- * stores the column mapping with from/to reversed (ID -&gt; ORDER_ID) relative to
- * the relationship's own fromTable/toTable direction. That asymmetry is existing,
- * current behavior; these tests pin it as-is rather than "fixing" it.
+ * keys, while SchemaRelationshipsResource("SCHEMA_A") only finds it while walking
+ * ORDERS's *exported* keys. Both paths now agree on columns ORDER_ID -&gt; ID (see
+ * {@code testSchemaRelationshipsResourceSchemaA}) -- the exported-keys path
+ * previously reported ID -&gt; ORDER_ID, reversed relative to the relationship's own
+ * fromTable/toTable direction; that bug is fixed in {@code RelationshipGraphBuilder}.
  */
 class RelationshipGraphCharacterizationTest {
 
@@ -169,9 +169,9 @@ class RelationshipGraphCharacterizationTest {
 
         JsonNode json = mapper.readTree(resource.read());
 
-        // Would fail if extraction changed which relationships are found, or -- most
-        // importantly -- if it "fixed" the existing from/to column-mapping reversal
-        // that only the exported-keys (cross-schema-incoming) code path exhibits.
+        // Would fail if extraction changed which relationships are found, or if the
+        // exported-keys column-mapping direction regressed back to reversed (ID,
+        // ORDER_ID) instead of matching the imported-keys convention.
         List<Map<String, Object>> expectedRelationships = List.of(
                 relationship("FK_NODE_A_B", "SCHEMA_A", "NODE_A", "SCHEMA_A", "NODE_B",
                         col("B_ID", "ID")),
@@ -180,11 +180,12 @@ class RelationshipGraphCharacterizationTest {
                 relationship("FK_ORDERS_CUSTOMER", "SCHEMA_A", "ORDERS", "SCHEMA_A", "CUSTOMERS",
                         col("CUSTOMER_ID", "ID")),
                 relationship("FK_INVOICES_ORDER", "SCHEMA_B", "INVOICES", "SCHEMA_A", "ORDERS",
-                        col("ID", "ORDER_ID"))
+                        col("ORDER_ID", "ID"))
         );
         assertEquals(expectedRelationships, relationshipsOf(json),
                 "relationships must include the incoming cross-schema FK from SCHEMA_B.INVOICES, "
-                        + "with its existing (reversed) column-mapping direction preserved");
+                        + "with columns in the same (fromColumn, toColumn) direction as the "
+                        + "imported-keys path");
 
         // Would fail if the cross-schema FK to/from SCHEMA_B were (wrongly) counted
         // in the topological sort for this schema-scoped resource, or if INVOICES
@@ -210,8 +211,9 @@ class RelationshipGraphCharacterizationTest {
         JsonNode json = mapper.readTree(resource.read());
 
         // Would fail if the outgoing cross-schema FK were dropped, or if its column
-        // mapping direction differed from the imported-keys convention (it should
-        // NOT be reversed here, unlike the SCHEMA_A/exported-keys case above).
+        // mapping direction differed from the imported-keys convention (this walks
+        // INVOICES's own imported keys, same as the SCHEMA_A case above now does
+        // for its exported-keys path).
         List<Map<String, Object>> expectedRelationships = List.of(
                 relationship("FK_INVOICES_ORDER", "SCHEMA_B", "INVOICES", "SCHEMA_A", "ORDERS",
                         col("ORDER_ID", "ID"))

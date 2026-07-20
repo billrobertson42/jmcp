@@ -60,16 +60,9 @@ import static org.peacetalk.jmcp.jdbc.resources.Util.tableUri;
  *       entirely, though they still appear in {@code relationships}.</li>
  * </ul>
  *
- * One further asymmetry, preserved as-is: for the {@code schemaName != null}
- * case, a relationship discovered via {@code getExportedKeys} stores its
- * {@link ColumnMapping} with {@code fromColumn}/{@code toColumn} reversed
- * relative to the relationship's own {@code fromTable}/{@code toTable}
- * direction -- unlike the {@code getImportedKeys} path, which is consistent.
- * This is existing, current behavior of {@code SchemaRelationshipsResource}, not
- * something introduced by this extraction; see
- * {@code RelationshipGraphCharacterizationTest} for the pinned shape and
- * {@code claude/RELATIONSHIPS_REFACTOR_PLAN.md} for why it is out of scope to
- * "fix" here.
+ * <p>The {@code getExportedKeys} path's {@link ColumnMapping} direction was
+ * previously reversed relative to the relationship's own {@code fromTable}/
+ * {@code toTable} direction -- fixed below; see {@link #walkExportedKeys}.
  */
 final class RelationshipGraphBuilder {
 
@@ -234,9 +227,11 @@ final class RelationshipGraphBuilder {
 
             List<ColumnMapping> mappings = new ArrayList<>();
             for (FkRow row : rows) {
-                // Reversed relative to walkImportedKeys's convention -- existing
-                // behavior, preserved as-is. See class javadoc.
-                mappings.add(new ColumnMapping(row.otherColumn(), row.column()));
+                // fromTable below is fkTable (row.otherTable()), where row.column()
+                // (FKCOLUMN_NAME) lives; toTable is the walked table, where
+                // row.otherColumn() (PKCOLUMN_NAME) lives. Matches walkImportedKeys's
+                // (fromColumn, toColumn) convention.
+                mappings.add(new ColumnMapping(row.column(), row.otherColumn()));
             }
 
             relationships.add(new Relationship(
