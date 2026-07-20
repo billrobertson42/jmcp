@@ -18,6 +18,7 @@ package org.peacetalk.jmcp.jdbc.resources;
 
 import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.core.ResourceProvider;
+import org.peacetalk.jmcp.core.routing.ResourceRoutes;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
@@ -40,6 +41,7 @@ import java.util.List;
 public class JdbcResourceProvider implements ResourceProvider {
 
     private ConnectionManager connectionManager;
+    private ResourceRoutes routes;
 
     /**
      * Set the connection manager to use for database operations
@@ -54,6 +56,45 @@ public class JdbcResourceProvider implements ResourceProvider {
         if (connectionManager == null) {
             throw new IllegalStateException("ConnectionManager must be set before initialization");
         }
+        routes = buildRoutes();
+    }
+
+    /**
+     * Declares every {@code db://...} URI shape this provider serves. Built only after
+     * {@link #connectionManager} is set (see {@link #initialize()}), since every route factory
+     * closes over it and the {@code id} guard calls {@link #connectionExists(String)}.
+     */
+    private ResourceRoutes buildRoutes() {
+        return ResourceRoutes.forScheme(Util.SCHEME)
+                .guard("id", this::connectionExists)
+
+                .route("context", p -> new ContextResource(connectionManager))
+                .route("connections", p -> new ConnectionsListResource(connectionManager))
+
+                .route("connection/:id",
+                        p -> new ConnectionResource(p.get("id"), connectionManager))
+                .route("connection/:id/schemas",
+                        p -> new SchemasListResource(p.get("id"), connectionManager))
+                .route("connection/:id/relationships",
+                        p -> new RelationshipsResource(p.get("id"), connectionManager))
+
+                .route("connection/:id/schema/:schema",
+                        p -> new SchemaResource(p.get("id"), p.get("schema"), connectionManager))
+                .route("connection/:id/schema/:schema/relationships",
+                        p -> new SchemaRelationshipsResource(p.get("id"), p.get("schema"), connectionManager))
+                .route("connection/:id/schema/:schema/tables",
+                        p -> new TablesListResource(p.get("id"), p.get("schema"), connectionManager))
+                .route("connection/:id/schema/:schema/views",
+                        p -> new ViewsListResource(p.get("id"), p.get("schema"), connectionManager))
+
+                .route("connection/:id/schema/:schema/table/:table",
+                        p -> new TableResource(p.get("id"), p.get("schema"), p.get("table"), connectionManager))
+                .route("connection/:id/schema/:schema/view/:view",
+                        p -> new ViewResource(p.get("id"), p.get("schema"), p.get("view"), connectionManager, Util.MAPPER))
+                .route("connection/:id/schema/:schema/procedure/:proc",
+                        p -> new ProcedureResource(p.get("id"), p.get("schema"), p.get("proc"), connectionManager))
+
+                .build();
     }
 
     @Override
@@ -78,126 +119,7 @@ public class JdbcResourceProvider implements ResourceProvider {
 
     @Override
     public Resource getResource(String uri) {
-        if (uri == null || !uri.startsWith(Util.SCHEME + "://")) {
-            return null;
-        }
-
-        String path = uri.substring((Util.SCHEME + "://").length());
-        String[] segments = path.split("/");
-
-        // Parse the path and return the appropriate resource
-        return switch (segments.length) {
-            case 1 -> handleRootResource(segments[0]);
-            case 2 -> handleConnectionResource(segments[0], segments[1]);
-            case 3 -> handleSchemaLevelResource(segments[0], segments[1], segments[2]);
-            case 4 -> handleObjectCollectionResource(segments[0], segments[1], segments[2], segments[3]);
-            case 5 -> handleObjectResource(segments[0], segments[1], segments[2], segments[3], segments[4]);
-            case 6 -> getResourceForSixSegments(segments[0], segments[1], segments[2], segments[3], segments[4], segments[5]);
-            default -> null;
-        };
-    }
-
-    /**
-     * Handle root-level resources: connections, context
-     */
-    private Resource handleRootResource(String resourceType) {
-        return switch (resourceType) {
-            case "connections" -> new ConnectionsListResource(connectionManager);
-            case "context" -> new ContextResource(connectionManager);
-            default -> null;
-        };
-    }
-
-    /**
-     * Handle connection-level resources: connection/{id}, connection/{id}/schemas
-     */
-    private Resource handleConnectionResource(String type, String idOrName) {
-        if (!"connection".equals(type)) {
-            return null;
-        }
-        // Validate connection exists
-        if (!connectionExists(idOrName)) {
-            return null;
-        }
-        return new ConnectionResource(idOrName, connectionManager);
-    }
-
-    /**
-     * Handle schema-level resources: connection/{id}/schemas, connection/{id}/relationships
-     */
-    private Resource handleSchemaLevelResource(String type, String connectionId, String schemaType) {
-        if (!"connection".equals(type)) {
-            return null;
-        }
-        if (!connectionExists(connectionId)) {
-            return null;
-        }
-
-        return switch (schemaType) {
-            case "schemas" -> new SchemasListResource(connectionId, connectionManager);
-            case "relationships" -> new RelationshipsResource(connectionId, connectionManager);
-            default -> null;
-        };
-    }
-
-    /**
-     * Handle object collection resources: connection/{id}/schema/{schema}/tables, views, etc.
-     */
-    private Resource handleObjectCollectionResource(String type, String connectionId,
-                                                    String schemaType, String schemaName) {
-        if (!"connection".equals(type) || !"schema".equals(schemaType)) {
-            return null;
-        }
-        if (!connectionExists(connectionId)) {
-            return null;
-        }
-
-        return new SchemaResource(connectionId, schemaName, connectionManager);
-    }
-
-    /**
-     * Handle object collection resources: relationships
-     */
-    private Resource handleObjectResource(String type, String connectionId,
-                                         String schemaType, String schemaName,
-                                         String objectTypeOrCollection) {
-        if (!"connection".equals(type) || !"schema".equals(schemaType)) {
-            return null;
-        }
-        if (!connectionExists(connectionId)) {
-            return null;
-        }
-
-        if ("relationships".equals(objectTypeOrCollection)) {
-            return new SchemaRelationshipsResource(connectionId, schemaName, connectionManager);
-        } else if ("tables".equals(objectTypeOrCollection)) {
-            return new TablesListResource(connectionId, schemaName, connectionManager);
-        } else if ("views".equals(objectTypeOrCollection)) {
-            return new ViewsListResource(connectionId, schemaName, connectionManager);
-        }
-        return null;
-    }
-
-    /**
-     * Handle specific object resources: table/{name}, view/{name}
-     * URI pattern: db://connection/{id}/schema/{schema}/table/{tableName}
-     */
-    public Resource getResourceForSixSegments(String type, String connectionId,
-                                               String schemaType, String schemaName,
-                                               String objectType, String objectName) {
-        if (!"connection".equals(type) || !"schema".equals(schemaType)) {
-            return null;
-        }
-        if (!connectionExists(connectionId)) {
-            return null;
-        }
-
-        return switch (objectType) {
-            case "table" -> new TableResource(connectionId, schemaName, objectName, connectionManager);
-            case "view" -> new ViewResource(connectionId, schemaName, objectName, connectionManager, Util.MAPPER);
-            case "procedure" -> new ProcedureResource(connectionId, schemaName, objectName, connectionManager);
-            default -> null;
-        };
+        return routes.resolve(uri);
     }
 
     private boolean connectionExists(String connectionId) {
@@ -207,7 +129,7 @@ public class JdbcResourceProvider implements ResourceProvider {
 
     @Override
     public boolean supportsScheme(String scheme) {
-        return Util.SCHEME.equals(scheme);
+        return routes.scheme().equals(scheme);
     }
 
     @Override
