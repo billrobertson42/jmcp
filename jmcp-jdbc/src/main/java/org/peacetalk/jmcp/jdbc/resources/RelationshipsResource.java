@@ -20,16 +20,7 @@ import org.peacetalk.jmcp.core.Resource;
 import org.peacetalk.jmcp.jdbc.ConnectionContext;
 import org.peacetalk.jmcp.jdbc.ConnectionManager;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static org.peacetalk.jmcp.jdbc.resources.Util.*;
 
@@ -74,108 +65,13 @@ public class RelationshipsResource implements Resource {
     @Override
     public String read() throws Exception {
         ConnectionContext context = connectionManager.getContext(connectionId);
-        List<Relationship> relationships = new ArrayList<>();
-
-        // For topological sort: map of "schema.table" -> dependencies
-        Map<String, Set<String>> dependencyGraph = new HashMap<>();
-        Set<String> allTables = new LinkedHashSet<>();
-
-        try (Connection conn = context.getConnection()) {
-            DatabaseMetaData metaData = conn.getMetaData();
-
-            // Get all schemas
-            List<String> schemas = new ArrayList<>();
-            try (ResultSet rs = metaData.getSchemas()) {
-                while (rs.next()) {
-                    String schemaName = rs.getString("TABLE_SCHEM");
-                    if (context.isSchemaVisible(schemaName)) {
-                        schemas.add(schemaName);
-                    }
-                }
-            }
-
-            // For each schema, get all tables
-            for (String schema : schemas) {
-                try (ResultSet rs = metaData.getTables(null, schema, "%", new String[]{"TABLE"})) {
-                    List<String> tables = new ArrayList<>();
-                    while (rs.next()) {
-                        String tableName = rs.getString("TABLE_NAME");
-                        tables.add(tableName);
-                        String qualifiedName = schema + "." + tableName;
-                        allTables.add(qualifiedName);
-                        dependencyGraph.putIfAbsent(qualifiedName, new HashSet<>());
-                    }
-
-                    // For each table, get its foreign keys
-                    for (String table : tables) {
-                        String fromQualified = schema + "." + table;
-
-                        try (ResultSet fkRs = metaData.getImportedKeys(null, schema, table)) {
-                            String currentFkName = null;
-                            List<ColumnMapping> currentMappings = new ArrayList<>();
-                            String currentPkSchema = null;
-                            String currentPkTable = null;
-
-                            while (fkRs.next()) {
-                                String fkName = fkRs.getString("FK_NAME");
-                                String fkColumn = fkRs.getString("FKCOLUMN_NAME");
-                                String pkSchema = fkRs.getString("PKTABLE_SCHEM");
-                                String pkTable = fkRs.getString("PKTABLE_NAME");
-                                String pkColumn = fkRs.getString("PKCOLUMN_NAME");
-
-                                if (fkName == null) continue;
-
-                                // Track dependency for topological sort
-                                String toQualified = pkSchema + "." + pkTable;
-                                dependencyGraph.computeIfAbsent(fromQualified, k -> new HashSet<>()).add(toQualified);
-
-                                if (!fkName.equals(currentFkName)) {
-                                    if (currentFkName != null) {
-                                        relationships.add(new Relationship(
-                                            currentFkName,
-                                            schema,
-                                            table,
-                                            currentPkSchema,
-                                            currentPkTable,
-                                            new ArrayList<>(currentMappings),
-                                            tableUri(connectionId, schema, table),
-                                            tableUri(connectionId, currentPkSchema, currentPkTable)
-                                        ));
-                                    }
-                                    currentFkName = fkName;
-                                    currentMappings.clear();
-                                    currentPkSchema = pkSchema;
-                                    currentPkTable = pkTable;
-                                }
-                                currentMappings.add(new ColumnMapping(fkColumn, pkColumn));
-                            }
-
-                            if (currentFkName != null) {
-                                relationships.add(new Relationship(
-                                    currentFkName,
-                                    schema,
-                                    table,
-                                    currentPkSchema,
-                                    currentPkTable,
-                                    currentMappings,
-                                    tableUri(connectionId, schema, table),
-                                    tableUri(connectionId, currentPkSchema, currentPkTable)
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Compute topological sort for copy order
-        TopologicalSortResult sortResult = TopologicalSort.sort(allTables, dependencyGraph);
+        RelationshipGraphBuilder.Graph graph = RelationshipGraphBuilder.build(connectionId, context, null);
 
         RelationshipsResponse response = new RelationshipsResponse(
             connectionId,
-            relationships,
-            sortResult.sortedTables(),
-            sortResult.cycles(),
+            graph.relationships(),
+            graph.copyOrder(),
+            graph.cyclesDetected(),
             new NavigationLinks(
                 connectionUri(connectionId)
             )
@@ -196,32 +92,9 @@ public class RelationshipsResource implements Resource {
     ) {}
 
     /**
-     * A single foreign key relationship in the database
-     */
-    public record Relationship(
-        String name,
-        String fromSchema,
-        String fromTable,
-        String toSchema,
-        String toTable,
-        List<ColumnMapping> columns,
-        String fromTableUri,
-        String toTableUri
-    ) {}
-
-    /**
-     * Column mapping for foreign keys
-     */
-    public record ColumnMapping(
-        String fromColumn,
-        String toColumn
-    ) {}
-
-    /**
      * Navigation links for HATEOAS-style navigation
      */
     public record NavigationLinks(
         String parent
     ) {}
 }
-
