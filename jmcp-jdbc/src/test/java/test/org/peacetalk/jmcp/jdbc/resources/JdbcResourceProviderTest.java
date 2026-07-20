@@ -27,7 +27,9 @@ import org.peacetalk.jmcp.jdbc.resources.JdbcResourceProvider;
 import org.peacetalk.jmcp.jdbc.resources.ProcedureResource;
 import org.peacetalk.jmcp.jdbc.resources.RelationshipsResource;
 import org.peacetalk.jmcp.jdbc.resources.SchemaRelationshipsResource;
+import org.peacetalk.jmcp.jdbc.resources.TableResource;
 import org.peacetalk.jmcp.jdbc.resources.TablesListResource;
+import org.peacetalk.jmcp.jdbc.resources.Util;
 import org.peacetalk.jmcp.jdbc.resources.ViewsListResource;
 import org.peacetalk.jmcp.jdbc.tools.results.ConnectionInfo;
 
@@ -204,6 +206,27 @@ class JdbcResourceProviderTest {
         assertInstanceOf(RelationshipsResource.class, resource,
             "connection-level relationships should route to RelationshipsResource");
         assertEquals(SCHEME + "://connection/testdb/relationships", resource.getUri());
+    }
+
+    // Percent-encoding round-trip (schema/table names containing '/')
+
+    @Test
+    void testGetResourceTableNameContainingSlashRoundTrips() {
+        // The old String.split("/") dispatch had no way to express a table name containing a
+        // '/' -- it would just be read as extra path segments and the URI would fail to route
+        // at all (7 segments instead of 6, falling into the "too many segments" default -> null
+        // case). Util.tableUri must now percent-encode the name so it survives as a single
+        // segment, and ResourceRoutes.resolve must decode it back to the exact original string.
+        String originalTableName = "weird/name";
+        String uri = Util.tableUri("testdb", "TEST_SCHEMA", originalTableName);
+
+        Resource resource = provider.getResource(uri);
+
+        assertInstanceOf(TableResource.class, resource, "the encoded URI must still route to a TableResource");
+        assertEquals("Table: " + originalTableName, resource.getName(),
+            "the name bound from the URI must equal the original un-encoded table name, slash included");
+        assertEquals(uri, resource.getUri(),
+            "re-deriving the URI from the bound (decoded) name must reproduce the same encoded URI");
     }
 
     // Invalid URI tests

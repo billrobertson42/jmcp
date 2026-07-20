@@ -16,6 +16,9 @@
         <Logger name="org.peacetalk.jmcp.server.Main" level="info" additivity="false">
             <AppenderRef ref="Stderr"/>
         </Logger>
+        <Logger name="org.peacetalk.jmcp.core.routing.ResourceRoutes" level="info" additivity="false">
+            <AppenderRef ref="Stderr"/>
+        </Logger>
         <Root level="warn">
             <AppenderRef ref="Stderr"/>
         </Root>
