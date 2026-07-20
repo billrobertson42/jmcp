@@ -23,6 +23,7 @@ module org.peacetalk.jmcp.core {
 
     exports org.peacetalk.jmcp.core.model;
     exports org.peacetalk.jmcp.core.protocol;
+    exports org.peacetalk.jmcp.core.routing;
     exports org.peacetalk.jmcp.core.schema;
     exports org.peacetalk.jmcp.core.transport;
     exports org.peacetalk.jmcp.core.validation;
